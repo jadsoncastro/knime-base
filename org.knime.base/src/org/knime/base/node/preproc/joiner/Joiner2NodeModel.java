@@ -54,6 +54,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Set;
 
+import org.knime.base.node.preproc.joiner.implementation.AbstractJoiner;
+import org.knime.base.node.preproc.joiner.implementation.Joiner;
+import org.knime.base.node.preproc.joiner.implementation.JoinerFactory;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.RowKey;
 import org.knime.core.node.BufferedDataTable;
@@ -109,7 +112,7 @@ public class Joiner2NodeModel extends NodeModel {
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {
-        Joiner joiner = new Joiner(inSpecs[0], inSpecs[1], m_settings);
+        Joiner joiner = JoinerFactory.create(inSpecs[0], inSpecs[1], m_settings);
         DataTableSpec[] spec = new DataTableSpec[]{joiner.getOutputSpec()};
 
         if (!joiner.getConfigWarnings().isEmpty()) {
@@ -126,9 +129,7 @@ public class Joiner2NodeModel extends NodeModel {
     @Override
     protected BufferedDataTable[] execute(final BufferedDataTable[] inData,
             final ExecutionContext exec) throws Exception {
-        Joiner joiner =
-                new Joiner(inData[0].getDataTableSpec(), inData[1]
-                        .getDataTableSpec(), m_settings);
+        AbstractJoiner joiner = JoinerFactory.create(inData[0], inData[1], m_settings);
 
         BufferedDataTable[] joinedTable = new BufferedDataTable[]{
                 joiner.computeJoinTable(inData[0], inData[1], exec)};
@@ -258,6 +259,6 @@ public class Joiner2NodeModel extends NodeModel {
             throws InvalidSettingsException {
     	Joiner2Settings s = new Joiner2Settings();
         s.loadSettings(settings);
-        Joiner.validateSettings(s);
+        AbstractJoiner.validateSettings(s);
     }
 }

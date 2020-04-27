@@ -45,7 +45,7 @@
  * History
  *   08.03.2010 (hofer): created
  */
-package org.knime.base.node.preproc.joiner;
+package org.knime.base.node.preproc.joiner.implementation;
 
 import java.util.Arrays;
 import java.util.Comparator;

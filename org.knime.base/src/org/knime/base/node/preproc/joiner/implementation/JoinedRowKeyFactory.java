@@ -45,23 +45,22 @@
  * History
  *   16.12.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner;
+package org.knime.base.node.preproc.joiner.implementation;
 
 import org.knime.core.data.RowKey;
 
 /**
- * This implementation uses one of the given row keys as the joined row key. It
- * uses the one which is not null or the left key if both are not null.
+ * An interface that provides a method for creating the row key of a joined row.
  *
  * @author Heiko Hofer
  */
-public class UseSingleRowKeyFactory implements JoinedRowKeyFactory {
-
+interface JoinedRowKeyFactory {
     /**
-     * {@inheritDoc}
+     * Creates a row key of the joined row.
+     *
+     * @param leftKey the row key of the left row or null if missing
+     * @param rightKey the row key of the right row or null if missing
+     * @return the row key of the joined row
      */
-    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
-        return null != leftKey ? leftKey : rightKey;
-    }
-
+    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey);
 }

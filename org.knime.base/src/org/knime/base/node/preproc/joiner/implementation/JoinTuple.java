@@ -45,7 +45,7 @@
  * History
  *   25.11.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner;
+package org.knime.base.node.preproc.joiner.implementation;
 
 import java.util.Arrays;
 

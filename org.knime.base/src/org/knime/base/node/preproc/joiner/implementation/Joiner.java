@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -40,27 +41,61 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ------------------------------------------------------------------------
- *
+ * ---------------------------------------------------------------------
+ * 
  * History
- *   16.12.2009 (Heiko Hofer): created
+ *   Apr 27, 2020 (carlwitt): created
  */
-package org.knime.base.node.preproc.joiner;
+package org.knime.base.node.preproc.joiner.implementation;
 
-import org.knime.core.data.RowKey;
+import java.util.List;
+
+import org.knime.core.data.DataTableSpec;
+import org.knime.core.node.BufferedDataTable;
+import org.knime.core.node.CanceledExecutionException;
+import org.knime.core.node.ExecutionContext;
+import org.knime.core.node.InvalidSettingsException;
 
 /**
- * An interface that provides a method for creating the row key of a joined row.
- *
- * @author Heiko Hofer
+ * 
+ * @author carlwitt
  */
-interface JoinedRowKeyFactory {
+public interface Joiner {
+
     /**
-     * Creates a row key of the joined row.
-     *
-     * @param leftKey the row key of the left row or null if missing
-     * @param rightKey the row key of the right row or null if missing
-     * @return the row key of the joined row
+     * Get warnings which occurred when processing the method
+     * <code>getOutputSpec</code>.
+     * @return The warning messages.
      */
-    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey);
+    List<String> getConfigWarnings();
+
+    /**
+     * Get warnings which occurred when processing the method
+     *  <code>computeJoinTable</code>.
+     * @return The warning messages.
+     */
+    List<String> getRuntimeWarnings();
+
+    /**
+     * Create the DataTableSpec of the output.
+     *
+     * @return The DataTableSpec of the output.
+     * @throws InvalidSettingsException if the settings are inconsistent with
+     *             the DataTableSpec elements given in the Constructor.
+     */
+    DataTableSpec getOutputSpec() throws InvalidSettingsException;
+
+    /**
+     * Joins the <code>leftTable</code> and the <code>rightTable</code>.
+     *
+     * @param leftTable The left input table.
+     * @param rightTable The right input table.
+     * @param exec The Execution monitor for this execution.
+     * @return The joined table.
+     * @throws CanceledExecutionException when execution is canceled
+     * @throws InvalidSettingsException when inconsistent settings are provided
+     */
+    BufferedDataTable computeJoinTable(BufferedDataTable leftTable, BufferedDataTable rightTable, ExecutionContext exec)
+        throws CanceledExecutionException, InvalidSettingsException;
+
 }

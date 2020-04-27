@@ -50,11 +50,12 @@ package org.knime.base.node.meta.looper;
 import java.io.File;
 import java.io.IOException;
 
-import org.knime.base.node.preproc.joiner.Joiner;
 import org.knime.base.node.preproc.joiner.Joiner2Settings;
 import org.knime.base.node.preproc.joiner.Joiner2Settings.CompositionMode;
 import org.knime.base.node.preproc.joiner.Joiner2Settings.DuplicateHandling;
 import org.knime.base.node.preproc.joiner.Joiner2Settings.JoinMode;
+import org.knime.base.node.preproc.joiner.implementation.Joiner;
+import org.knime.base.node.preproc.joiner.implementation.JoinerFactory;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataRow;
@@ -157,7 +158,7 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
             BufferedDataTable left = m_currentAppendTable;
             BufferedDataTable right = copy(inData[0], true,
                     exec.createSubExecutionContext(0.1));
-            Joiner joiner = new Joiner(left.getDataTableSpec(),
+            Joiner joiner = JoinerFactory.create(left.getDataTableSpec(),
                     right.getDataTableSpec(), settings);
             m_currentAppendTable = joiner.computeJoinTable(left, right,
                     exec.createSubExecutionContext(0.9));
