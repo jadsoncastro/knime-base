@@ -189,14 +189,6 @@ public class LocalRelativeToPathConfig {
     }
 
     /**
-     * @param path path to check
-     * @return {@code true} if the path represents a workflow directory.
-     */
-    public boolean isWorkflow(final LocalRelativeToPath path) {
-        return isLocalWorkflowFolder(path.toAbsoluteLocalPath());
-    }
-
-    /**
      *
      * @param localPath
      * @return true when localPath is a workflow directory.

@@ -65,18 +65,20 @@ public class LocalRelativeToPathIterator implements Iterator<LocalRelativeToPath
     /**
      * Creates an iterator over all the files and folder in the given paths location.
      *
-     * @param knimePath destination to iterate over
+     * @param knimePath path in the relative-to file system to iterate over
+     * @param localPath path in the local file system to iterate over
      * @param filter
      * @throws IOException on I/O errors
      */
-    public LocalRelativeToPathIterator(final LocalRelativeToPath knimePath, final Filter<? super Path> filter) throws IOException {
+    public LocalRelativeToPathIterator(final LocalRelativeToPath knimePath, final Path localPath,
+        final Filter<? super Path> filter) throws IOException {
 
         if (!Files.isDirectory(knimePath)) {
             throw new NotDirectoryException(knimePath.toString());
         }
 
         try {
-            m_iterator = Files.list(knimePath.toAbsoluteLocalPath())
+            m_iterator = Files.list(localPath)
                 .map(p -> (LocalRelativeToPath)knimePath.resolve(p.getFileName().toString())).filter(p -> {
                     try {
                         return filter.accept(p);

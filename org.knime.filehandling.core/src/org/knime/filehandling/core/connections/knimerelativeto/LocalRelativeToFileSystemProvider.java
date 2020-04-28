@@ -103,11 +103,6 @@ public class LocalRelativeToFileSystemProvider
 
     }
 
-    @SuppressWarnings("resource")
-    private LocalRelativeToPathConfig getPathConfig() {
-        return getFileSystemInternal().getPathConfig();
-    }
-
     /**
      * Gets or creates a new {@link FileSystem} based on the input URI.
      *
@@ -121,13 +116,7 @@ public class LocalRelativeToFileSystemProvider
     }
 
     private Path toLocalPathWithAccessibilityCheck(final LocalRelativeToPath path) throws NoSuchFileException {
-        final Path localPath = path.toAbsoluteLocalPath();
-
-        if (!getPathConfig().isLocalPathAccessible(localPath)) {
-            throw new NoSuchFileException(path.toString());
-        }
-
-        return localPath;
+        return getFileSystemInternal().toLocalPathWithAccessibilityCheck(path);
     }
 
     @Override
@@ -153,14 +142,13 @@ public class LocalRelativeToFileSystemProvider
     }
 
     @Override
-    protected Iterator<LocalRelativeToPath> createPathIterator(final LocalRelativeToPath dir, final Filter<? super Path> filter) throws IOException {
-        return new LocalRelativeToPathIterator(dir, filter);
+    protected Iterator<LocalRelativeToPath> createPathIterator(final LocalRelativeToPath path, final Filter<? super Path> filter) throws IOException {
+        return new LocalRelativeToPathIterator(path, toLocalPathWithAccessibilityCheck(path), filter);
     }
 
     @Override
     protected boolean exists(final LocalRelativeToPath path) throws IOException {
-        final Path localPath = path.toAbsoluteLocalPath();
-        return getPathConfig().isLocalPathAccessible(localPath) && Files.exists(localPath);
+        return getFileSystemInternal().existsWithAccessibilityCheck(path);
     }
 
     @Override

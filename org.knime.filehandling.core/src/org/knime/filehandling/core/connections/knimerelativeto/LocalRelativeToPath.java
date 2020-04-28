@@ -113,13 +113,12 @@ public class LocalRelativeToPath extends UnixStylePath {
     }
 
     /**
-     * @return an absolute path in the local file system (default FS provider) that corresponds to this path.
+     * Appends this path to the given base directory without file system specific separators.
+     *
+     * @param baseDir base directory to append this path to
+     * @return base directory with this path appended
      */
-    @SuppressWarnings("resource")
-    public Path toAbsoluteLocalPath() {
-        // FS specific separator: combine local FS path with separator independent path parts
-        final LocalRelativeToPath absolutePath = toAbsolutePath();
-        final String[] absolutePathParts = absolutePath.m_pathParts.toArray(new String[0]);
-        return Paths.get(getFileSystem().getPathConfig().getLocalMountpointFolder().toString(), absolutePathParts);
+    protected Path appendToBaseDir(final Path baseDir) {
+        return Paths.get(baseDir.toString(), m_pathParts.toArray(new String[0]));
     }
 }

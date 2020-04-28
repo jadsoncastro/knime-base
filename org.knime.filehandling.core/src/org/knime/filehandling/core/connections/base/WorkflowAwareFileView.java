@@ -83,7 +83,7 @@ public class WorkflowAwareFileView extends NioFileView {
 
             if (workflowIcon != null && path instanceof LocalRelativeToPath) {
                 final LocalRelativeToPath relativePath = (LocalRelativeToPath)path;
-                if (relativePath.getFileSystem().getPathConfig().isWorkflow(relativePath)) {
+                if (relativePath.getFileSystem().isWorkflow(relativePath)) {
                     return workflowIcon;
                 }
 

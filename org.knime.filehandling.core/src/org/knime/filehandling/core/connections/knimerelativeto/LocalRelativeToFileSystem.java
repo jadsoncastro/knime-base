@@ -52,6 +52,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
@@ -155,12 +156,12 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
      * Check if given path represent a regular file. Workflow directories are files, with the exception of the current
      * workflow dir and a workflow relative path.
      *
-     * @param path relative path to check
+     * @param path relative-to path to check
      * @return {@code true} if path is a normal file or a workflow directory
      * @throws IOException
      */
     protected boolean isRegularFile(final LocalRelativeToPath path) throws IOException {
-        final Path localPath = path.toAbsoluteLocalPath();
+        final Path localPath = toAbsoluteLocalPath(path);
 
         if (!Files.isDirectory(localPath)) {
             return true; // normal file
@@ -168,8 +169,27 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
             && (m_pathConfig.isCurrentWorkflowFolder(localPath) || m_pathConfig.isInCurrentWorkflowFolder(localPath))) {
             return false; // workflow folder, or a folder within current workflow folder
         } else {
-            return m_pathConfig.isWorkflow(path); // workflow or normal directory
+            return isWorkflow(path); // workflow or normal directory
         }
+    }
+
+    /**
+     * Check if the given relative-to path exists and is accessible.
+     *
+     * @param path relative-to path to check
+     * @return {@code true} if path exists and is accessible
+     */
+    protected boolean existsWithAccessibilityCheck(final LocalRelativeToPath path) {
+        final Path localPath = toAbsoluteLocalPath(path);
+        return m_pathConfig.isLocalPathAccessible(localPath) && Files.exists(localPath);
+    }
+
+    /**
+     * @param path path to check
+     * @return {@code true} if the path represents a workflow directory.
+     */
+    public boolean isWorkflow(final LocalRelativeToPath path) {
+        return LocalRelativeToPathConfig.isLocalWorkflowFolder(toAbsoluteLocalPath(path));
     }
 
     @Override
@@ -190,8 +210,36 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
     /**
      * @return the underlying configuration, e.g. where this fs is rooted in the local file system.
      */
-    public LocalRelativeToPathConfig getPathConfig() {
+    protected LocalRelativeToPathConfig getPathConfig() {
         return m_pathConfig;
+    }
+
+    /**
+     * Validates that a given relative-to file system path is accessible and maps it to a path in the local file system.
+     *
+     * @param path a relative-to path inside relative-to file system
+     * @return an absolute path in the local file system (default FS provider) that corresponds to this path.
+     * @throws NoSuchFileException if given path is not accessible
+     */
+    protected Path toLocalPathWithAccessibilityCheck(final LocalRelativeToPath path) throws NoSuchFileException {
+        final Path localPath = toAbsoluteLocalPath(path);
+
+        if (!m_pathConfig.isLocalPathAccessible(localPath)) {
+            throw new NoSuchFileException(path.toString());
+        }
+
+        return localPath;
+    }
+
+    /**
+     * Maps a path from relative-to file system to a path in the local file system.
+     *
+     * @param path a relative-to path inside relative-to file system
+     * @return an absolute path in the local file system (default FS provider) that corresponds to this path.
+     */
+    private Path toAbsoluteLocalPath(final LocalRelativeToPath path) {
+        final LocalRelativeToPath absolutePath = path.toAbsolutePath();
+        return absolutePath.appendToBaseDir(m_pathConfig.getLocalMountpointFolder());
     }
 
     /**
