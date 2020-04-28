@@ -48,39 +48,21 @@
  */
 package org.knime.filehandling.core.connections.knimerelativeto;
 
-import javax.swing.filechooser.FileView;
-
-import org.knime.filehandling.core.defaultnodesettings.FilesHistoryPanel;
-import org.knime.filehandling.core.filechooser.NioFileSystemBrowser;
+import org.knime.filehandling.core.filechooser.NioFileSystemView;
 
 /**
- * A KNIME File System Browser allowing the {@link FilesHistoryPanel} to browse a local KNIME relative to File System.
+ * KNIME relative-to file system view.
  *
  * @author Sascha Wolke, KNIME GmbH
  */
-public class LocalRelativeToFileSystemBrowser extends NioFileSystemBrowser {
-    private final LocalRelativeToFileSystem m_fileSystem;
+public class RelativeToFileSystemView extends NioFileSystemView {
 
     /**
-     * Creates a new local KNIME relative to File System Browser with a view and base location.
+     * Constructs a new KNIME relative-to file system view.
      *
-     * @param fileSystem the file system to use
+     * @param fileSystem the file system to wrap the view around
      */
-    public LocalRelativeToFileSystemBrowser(final LocalRelativeToFileSystem fileSystem) {
-        super(new LocalRelativeToFileSystemView(fileSystem));
-        m_fileSystem = fileSystem;
-    }
-
-    @Override
-    protected FileView getFileView() {
-        return new WorkflowAwareFileView();
-    }
-
-    /**
-     * Convert the selected file to a relative path in workflow relative mode.
-     */
-    @Override
-    protected String postprocessSelectedFilePath(final String selectedFile) {
-        return m_fileSystem.getWorkingDirectory().relativize(m_fileSystem.getPath(selectedFile)).toString();
+    public RelativeToFileSystemView(final BaseRelativeToFileSystem fileSystem) {
+        super(fileSystem, fileSystem.getWorkingDirectory());
     }
 }

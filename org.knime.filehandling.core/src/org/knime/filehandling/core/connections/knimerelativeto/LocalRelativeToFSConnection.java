@@ -66,7 +66,7 @@ public class LocalRelativeToFSConnection implements FSConnection {
 
     private final LocalRelativeToFileSystem m_fileSystem;
 
-    private final LocalRelativeToFileSystemBrowser m_browser;
+    private final RelativeToFileSystemBrowser m_browser;
 
     /**
      * Constructor.
@@ -77,7 +77,7 @@ public class LocalRelativeToFSConnection implements FSConnection {
         final URI fsKey = URI.create(type.getSchemeAndHost());
         try {
             m_fileSystem = LocalRelativeToFileSystemProvider.getOrCreateFileSystem(fsKey);
-            m_browser = new LocalRelativeToFileSystemBrowser(m_fileSystem);
+            m_browser = new RelativeToFileSystemBrowser(m_fileSystem);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
         }

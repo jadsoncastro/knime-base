@@ -48,21 +48,63 @@
  */
 package org.knime.filehandling.core.connections.knimerelativeto;
 
-import org.knime.filehandling.core.filechooser.NioFileSystemView;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import org.apache.commons.httpclient.URIException;
+import org.apache.commons.httpclient.util.URIUtil;
+import org.knime.filehandling.core.connections.base.UnixStylePath;
 
 /**
- * Local KNIME relative to File System view.
+ * KNIME relative-to file system path.
  *
  * @author Sascha Wolke, KNIME GmbH
  */
-public class LocalRelativeToFileSystemView extends NioFileSystemView {
+public class RelativeToPath extends UnixStylePath {
 
     /**
-     * Constructs a new local KNIME relative to File System View.
+     * Creates a path using a given file system and path parts.
      *
-     * @param fileSystem the file system to wrap the view around
+     * @param fileSystem the file system
+     * @param first first part of the path
+     * @param more subsequent parts of the path
      */
-    public LocalRelativeToFileSystemView(final LocalRelativeToFileSystem fileSystem) {
-        super(fileSystem, fileSystem.getWorkingDirectory());
+    public RelativeToPath(final BaseRelativeToFileSystem fileSystem, final String first,
+        final String... more) {
+        super(fileSystem, first, more);
+    }
+
+    @Override
+    public URI toUri() {
+        try {
+            final boolean workflowRelativeFS =
+                ((BaseRelativeToFileSystem)getFileSystem()).isWorkflowRelativeFileSystem();
+            final String path;
+
+            if (workflowRelativeFS && isAbsolute()) {
+                path = getFileSystem().getSeparator() + getFileSystem().getWorkingDirectory().relativize(this);
+            } else if (workflowRelativeFS) {
+                path = getFileSystem().getSeparator() + this;
+            } else {
+                path = toAbsolutePath().toString();
+            }
+
+            return new URI(m_fileSystem.getSchemeString(), m_fileSystem.getHostString(), //
+                URIUtil.encodePath(path), null);
+        } catch (URIException | URISyntaxException ex) {
+            throw new IllegalArgumentException(ex);
+        }
+    }
+
+    /**
+     * Appends this path to the given base directory without file system specific separators.
+     *
+     * @param baseDir base directory to append this path to
+     * @return base directory with this path appended
+     */
+    public Path appendToBaseDir(final Path baseDir) {
+        return Paths.get(baseDir.toString(), m_pathParts.toArray(new String[0]));
     }
 }

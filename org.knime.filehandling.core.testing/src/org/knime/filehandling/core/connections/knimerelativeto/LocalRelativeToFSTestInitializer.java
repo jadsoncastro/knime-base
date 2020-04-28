@@ -86,7 +86,7 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
     /**
      * Default constructor.
      * 
-     * @param rootDirectory  temporary directory to use as mountpoint root
+     * @param rootDirectory temporary directory to use as mountpoint root
      * @param fileSystemHost hostname of knime FS (knime.mountpoint or knime.workflow)
      * @throws IOException
      */
@@ -167,15 +167,14 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
     }
 
     @Override
-    public LocalRelativeToPath createFile(final String... pathComponents) throws IOException {
+    public RelativeToPath createFile(final String... pathComponents) throws IOException {
         return createFileWithContent("", pathComponents);
     }
 
     @Override
-    public LocalRelativeToPath createFileWithContent(final String content, final String... pathComponents)
+    public RelativeToPath createFileWithContent(final String content, final String... pathComponents)
         throws IOException {
-        final Path localFile = super.createLocalFileWithContent(content, pathComponents);
-
-        return m_fileSystem.toAbsoluteLocalRelativeToPath(localFile);
+        super.createLocalFileWithContent(content, pathComponents);
+        return m_fileSystem.getPath(getFileSystem().getSeparator(), pathComponents);
     }
 }
