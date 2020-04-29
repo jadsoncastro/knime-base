@@ -59,12 +59,9 @@ public abstract class FSFileSystem<T extends FSPath> extends FileSystem {
 
     private final Optional<String> m_fsSpecifier;
 
-    private final String m_workingDirectory;
-
-    public FSFileSystem(final Choice fsChoice, final Optional<String> fsSpecifier, final String workingDir) {
+    public FSFileSystem(final Choice fsChoice, final Optional<String> fsSpecifier) {
         m_fsChoice = fsChoice;
         m_fsSpecifier = fsSpecifier;
-        m_workingDirectory = workingDir;
     }
 
     public Choice getFileSystemChoice() {
@@ -83,9 +80,7 @@ public abstract class FSFileSystem<T extends FSPath> extends FileSystem {
      *
      * @return the working directory, aka current directory.
      */
-    public T getWorkingDirectory() {
-        return getPath(m_workingDirectory);
-    }
+    public abstract T getWorkingDirectory();
 
     public T getPath(final FSLocation fsLocation) {
         if (fsLocation.equals(FSLocation.NULL) || fsLocation.getFileSystemChoice() != m_fsChoice) {

@@ -77,12 +77,17 @@ class LocalFileSystem extends FSFileSystem<LocalPath> {
     private static final FileSystem DEFAULT_FS = FileSystems.getDefault();
 
     private LocalFileSystem() {
-        super(Choice.LOCAL_FS, Optional.empty(), System.getProperty("user.dir"));
+        super(Choice.LOCAL_FS, Optional.empty());
     }
 
     @Override
     public FSFileSystemProvider provider() {
         return LocalFileSystemProvider.INSTANCE;
+    }
+
+    @Override
+    public LocalPath getWorkingDirectory() {
+        return getPath(System.getProperty("user.dir"));
     }
 
     @Override

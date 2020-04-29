@@ -106,7 +106,6 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
         super(fileSystemProvider, //
             uri, //
             CACHE_TTL, //
-            pathConfig.getWorkingDirectory(),
             isConnectedFs ? Choice.CONNECTED_FS : Choice.KNIME_FS,//
             Optional.of(pathConfig.getType() == Type.MOUNTPOINT_RELATIVE ? "mountpoint" : "workflow"));
 

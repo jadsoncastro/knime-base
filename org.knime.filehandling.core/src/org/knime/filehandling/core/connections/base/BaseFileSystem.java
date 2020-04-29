@@ -101,11 +101,10 @@ public abstract class BaseFileSystem<T extends FSPath> extends FSFileSystem<T> {
     public BaseFileSystem(final  BaseFileSystemProvider<T, ?> fileSystemProvider,
         final URI uri,
         final long cacheTTL,
-        final String workingDirectory,
         final Choice fsChoice,
         final Optional<String> fsSpecifier) {
 
-        super(fsChoice, fsSpecifier, workingDirectory);
+        super(fsChoice, fsSpecifier);
 
         Validate.notNull(fileSystemProvider, "File system provider must not be null.");
         Validate.notNull(uri, "URI must not be null.");

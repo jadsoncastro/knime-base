@@ -80,7 +80,6 @@ public class KNIMERemoteFileSystem extends BaseFileSystem<KNIMERemotePath> {
         super(provider, //
             baseLocation, //
             0,
-            PATH_SEPARATOR,
             isConnectedFs ? Choice.CONNECTED_FS : Choice.KNIME_MOUNTPOINT,//
             Optional.of(baseLocation.getHost()));
 
