@@ -50,12 +50,12 @@ package org.knime.base.node.meta.looper;
 import java.io.File;
 import java.io.IOException;
 
-import org.knime.base.node.preproc.joiner.Joiner2Settings;
-import org.knime.base.node.preproc.joiner.Joiner2Settings.CompositionMode;
-import org.knime.base.node.preproc.joiner.Joiner2Settings.DuplicateHandling;
-import org.knime.base.node.preproc.joiner.Joiner2Settings.JoinMode;
-import org.knime.base.node.preproc.joiner.implementation.Joiner;
-import org.knime.base.node.preproc.joiner.implementation.JoinerFactory;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
+import org.knime.base.node.preproc.joiner3.implementation.Joiner;
+import org.knime.base.node.preproc.joiner3.implementation.CostModelFactory;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataRow;
@@ -141,7 +141,7 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
                 ctx.setProgress(1.0);
             }
         } else {
-            Joiner2Settings settings = new Joiner2Settings();
+            Joiner3Settings settings = new Joiner3Settings();
             settings.setCompositionMode(CompositionMode.MatchAll);
             settings.setDuplicateColumnSuffix(" (Iter #" + m_iteration + ")");
             settings.setDuplicateHandling(DuplicateHandling.AppendSuffix);
@@ -158,7 +158,7 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
             BufferedDataTable left = m_currentAppendTable;
             BufferedDataTable right = copy(inData[0], true,
                     exec.createSubExecutionContext(0.1));
-            Joiner joiner = JoinerFactory.create(left.getDataTableSpec(),
+            Joiner joiner = CostModelFactory.create(left.getDataTableSpec(),
                     right.getDataTableSpec(), settings);
             m_currentAppendTable = joiner.computeJoinTable(left, right,
                     exec.createSubExecutionContext(0.9));

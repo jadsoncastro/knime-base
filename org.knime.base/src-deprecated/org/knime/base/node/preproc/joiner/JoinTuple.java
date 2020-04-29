@@ -43,25 +43,68 @@
  * ------------------------------------------------------------------------
  *
  * History
- *   16.12.2009 (Heiko Hofer): created
+ *   25.11.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner;
 
-import org.knime.core.data.RowKey;
+import java.util.Arrays;
+
+import org.knime.core.data.DataCell;
 
 /**
- * This implementation uses one of the given row keys as the joined row key. It
- * uses the one which is not null or the left key if both are not null.
+ * Two {@link InputRow} do join when two of there JoinTuples do match.
  *
  * @author Heiko Hofer
  */
-public class UseSingleRowKeyFactory implements JoinedRowKeyFactory {
+class JoinTuple {
+    /** The cells in the tuple. */
+    private DataCell[] m_cells;
+
+    /**
+     * Creates a new JoinTuple.
+     *
+     * @param cells The cells which are used to test for a match.
+     */
+    public JoinTuple(final DataCell[] cells) {
+        m_cells = cells;
+    }
 
     /**
      * {@inheritDoc}
      */
-    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
-        return null != leftKey ? leftKey : rightKey;
+    @Override
+    public int hashCode() {
+        return Arrays.hashCode(m_cells);
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean equals(final Object obj) {
+        // check for self-comparison
+        if (this == obj) {
+            return true;
+        }
+        // check obj type
+        if (!(obj instanceof JoinTuple)) {
+            return false;
+        }
+        JoinTuple that = (JoinTuple)obj;
+        for (int i = 0; i < this.m_cells.length; i++) {
+            DataCell thisCell = this.m_cells[i];
+            DataCell thatCell = that.m_cells[i];
+            // Missing cells do not match here (see Bug 2625). Note, that
+            // missing cells are viewed to be equal in DataCell::equals().
+            if (thisCell.isMissing() || thatCell.isMissing()) {
+                return false;
+            }
+            // compare the data cells
+            if (!thisCell.equals(thatCell)) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
+

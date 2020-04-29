@@ -1,6 +1,5 @@
 /*
  * ------------------------------------------------------------------------
- *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -41,41 +40,71 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ---------------------------------------------------------------------
+ * ------------------------------------------------------------------------
  *
  * History
- *   Apr 27, 2020 (carlwitt): created
+ *   25.11.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner3.implementation;
 
-import org.knime.base.node.preproc.joiner.Joiner2Settings;
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.BufferedDataTable;
+import java.util.Arrays;
+
+import org.knime.core.data.DataCell;
 
 /**
+ * Two {@link InputRow} do join when two of there JoinTuples do match.
  *
- * Selects join implementations according to join type, table specifications, and table sizes.
- * This implements a rudimentary cost model that estimates which join implementation is the fastest.
- *
- * @author Carl Witt, KNIME AG, Zurich, Switzerland
- *
+ * @author Heiko Hofer
  */
-public class JoinerFactory {
+class JoinTuple {
+    /** The cells in the tuple. */
+    private DataCell[] m_cells;
 
-    private JoinerFactory() {}
-
-    public static AbstractJoiner create(final DataTableSpec dataTableSpec, final DataTableSpec dataTableSpec2, final Joiner2Settings settings) {
-        return new Legacy(dataTableSpec, dataTableSpec2, settings);
+    /**
+     * Creates a new JoinTuple.
+     *
+     * @param cells The cells which are used to test for a match.
+     */
+    public JoinTuple(final DataCell[] cells) {
+        m_cells = cells;
     }
 
     /**
-     * @param bufferedDataTable
-     * @param bufferedDataTable2
-     * @param settings
-     * @return
+     * {@inheritDoc}
      */
-    public static AbstractJoiner create(final BufferedDataTable bufferedDataTable, final BufferedDataTable bufferedDataTable2,
-        final Joiner2Settings settings) {
-        return create(bufferedDataTable.getDataTableSpec(), bufferedDataTable2.getDataTableSpec(), settings);
+    @Override
+    public int hashCode() {
+        return Arrays.hashCode(m_cells);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean equals(final Object obj) {
+        // check for self-comparison
+        if (this == obj) {
+            return true;
+        }
+        // check obj type
+        if (!(obj instanceof JoinTuple)) {
+            return false;
+        }
+        JoinTuple that = (JoinTuple)obj;
+        for (int i = 0; i < this.m_cells.length; i++) {
+            DataCell thisCell = this.m_cells[i];
+            DataCell thatCell = that.m_cells[i];
+            // Missing cells do not match here (see Bug 2625). Note, that
+            // missing cells are viewed to be equal in DataCell::equals().
+            if (thisCell.isMissing() || thatCell.isMissing()) {
+                return false;
+            }
+            // compare the data cells
+            if (!thisCell.equals(thatCell)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
+

@@ -45,20 +45,17 @@
  * History
  *   27.07.2007 (thor): created
  */
-package org.knime.base.node.preproc.joiner;
+package org.knime.base.node.preproc.joiner3;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Set;
+import java.util.Arrays;
 
-import org.knime.base.node.preproc.joiner.implementation.AbstractJoiner;
-import org.knime.base.node.preproc.joiner.implementation.Joiner;
-import org.knime.base.node.preproc.joiner.implementation.JoinerFactory;
+import org.knime.base.node.preproc.joiner3.implementation.AbstractJoiner;
+import org.knime.base.node.preproc.joiner3.implementation.Joiner;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.RowKey;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -79,16 +76,9 @@ import org.knime.core.node.property.hilite.HiLiteTranslator;
  *
  * @author Heiko Hofer
  */
-public class Joiner2NodeModel extends NodeModel {
+public class Joiner3NodeModel extends NodeModel {
 
-    private final Joiner2Settings m_settings = new Joiner2Settings();
-
-
-    private HashMap<RowKey, Set<RowKey>> m_leftRowKeyMap
-        = new HashMap<RowKey, Set<RowKey>>();
-    private HashMap<RowKey, Set<RowKey>> m_rightRowKeyMap
-        = new HashMap<RowKey, Set<RowKey>>();
-
+    private final Joiner3Settings m_settings = new Joiner3Settings();
 
     private HiLiteHandler m_outHandler;
     private HiLiteTranslator m_rightTranslator;
@@ -99,7 +89,7 @@ public class Joiner2NodeModel extends NodeModel {
     /**
      * Creates a new model for the Joiner node.
      */
-    public Joiner2NodeModel() {
+    public Joiner3NodeModel() {
         super(2, 1);
         m_outHandler = new HiLiteHandler();
         m_leftTranslator = new HiLiteTranslator();
@@ -112,14 +102,7 @@ public class Joiner2NodeModel extends NodeModel {
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {
-        Joiner joiner = JoinerFactory.create(inSpecs[0], inSpecs[1], m_settings);
-        DataTableSpec[] spec = new DataTableSpec[]{joiner.getOutputSpec()};
-
-        if (!joiner.getConfigWarnings().isEmpty()) {
-            for (String warning : joiner.getConfigWarnings()) {
-                setWarningMessage(warning);
-            }
-        }
+        DataTableSpec[] spec = AbstractJoiner.createOutputSpec(m_settings, inSpecs, warning -> setWarningMessage(warning));
         return spec;
     }
 
@@ -128,21 +111,16 @@ public class Joiner2NodeModel extends NodeModel {
      */
     @Override
     protected BufferedDataTable[] execute(final BufferedDataTable[] inData,
-            final ExecutionContext exec) throws Exception {
-        AbstractJoiner joiner = JoinerFactory.create(inData[0], inData[1], m_settings);
+        final ExecutionContext exec) throws Exception {
+        Joiner joiner = m_settings.getJoinAlgorithm().getFactory().create(m_settings, inData[0],
+            Arrays.copyOfRange(inData, 1, inData.length));
 
         BufferedDataTable[] joinedTable = new BufferedDataTable[]{
-                joiner.computeJoinTable(inData[0], inData[1], exec)};
+                joiner.computeJoinTable(inData[0], inData[1], exec, warning -> setWarningMessage(warning))};
 
-        if (!joiner.getRuntimeWarnings().isEmpty()) {
-            for (String warning : joiner.getRuntimeWarnings()) {
-                setWarningMessage(warning);
-            }
-        }
-        m_leftRowKeyMap = joiner.getLeftRowKeyMap();
-        m_rightRowKeyMap = joiner.getRightRowKeyMap();
-        m_leftMapper = new DefaultHiLiteMapper(m_leftRowKeyMap);
-        m_rightMapper = new DefaultHiLiteMapper(m_rightRowKeyMap);
+        // TODO hiliting
+//        m_leftMapper = new DefaultHiLiteMapper(m_leftRowKeyMap);
+//        m_rightMapper = new DefaultHiLiteMapper(m_rightRowKeyMap);
         m_leftTranslator.setMapper(m_leftMapper);
         m_rightTranslator.setMapper(m_rightMapper);
 
@@ -189,8 +167,6 @@ public class Joiner2NodeModel extends NodeModel {
      */
     @Override
     protected void reset() {
-        m_leftRowKeyMap = null;
-        m_rightRowKeyMap = null;
         m_leftTranslator.setMapper(null);
         m_rightTranslator.setMapper(null);
     }
@@ -204,10 +180,9 @@ public class Joiner2NodeModel extends NodeModel {
             final ExecutionMonitor exec) throws IOException,
             CanceledExecutionException {
         File settingsFile = new File(nodeInternDir, "joinerInternalSettings");
-        FileInputStream in = new FileInputStream(settingsFile);
-        NodeSettingsRO settings = NodeSettings.loadFromXML(in);
-        try {
 
+        try(FileInputStream in = new FileInputStream(settingsFile)) {
+            NodeSettingsRO settings = NodeSettings.loadFromXML(in);
             NodeSettingsRO leftMapSet = settings.getNodeSettings(
                 "leftHiliteMapping");
             m_leftTranslator.setMapper(DefaultHiLiteMapper.load(leftMapSet));
@@ -239,8 +214,9 @@ public class Joiner2NodeModel extends NodeModel {
         ((DefaultHiLiteMapper) m_rightTranslator.getMapper()).save(rightMapSet);
 
         File f = new File(nodeInternDir, "joinerInternalSettings");
-        FileOutputStream out = new FileOutputStream(f);
-        internalSettings.saveToXML(out);
+        try(FileOutputStream out = new FileOutputStream(f)){
+            internalSettings.saveToXML(out);
+        }
     }
 
     /**
@@ -257,7 +233,7 @@ public class Joiner2NodeModel extends NodeModel {
     @Override
     protected void validateSettings(final NodeSettingsRO settings)
             throws InvalidSettingsException {
-    	Joiner2Settings s = new Joiner2Settings();
+    	Joiner3Settings s = new Joiner3Settings();
         s.loadSettings(settings);
         AbstractJoiner.validateSettings(s);
     }

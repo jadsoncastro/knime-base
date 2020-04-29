@@ -45,7 +45,7 @@
  * History
  *   16.12.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner3.implementation;
 
 import org.knime.core.data.RowKey;
 

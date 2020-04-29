@@ -45,44 +45,22 @@
  * History
  *   16.12.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner;
 
 import org.knime.core.data.RowKey;
 
 /**
- * This implementation composes the joined row key by concatenating the left
- * and the right row key with the given separator in the middle.
+ * An interface that provides a method for creating the row key of a joined row.
  *
  * @author Heiko Hofer
  */
-class ConcatenateJoinedRowKeyFactory implements JoinedRowKeyFactory {
-    private String m_separator;
-
+interface JoinedRowKeyFactory {
     /**
-     * @param separator The separator put in the middle of the joined row key.
+     * Creates a row key of the joined row.
+     *
+     * @param leftKey the row key of the left row or null if missing
+     * @param rightKey the row key of the right row or null if missing
+     * @return the row key of the joined row
      */
-    ConcatenateJoinedRowKeyFactory(final String separator) {
-        super();
-        m_separator = separator;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
-        StringBuilder builder = new StringBuilder();
-        if (null != leftKey) {
-            builder.append(leftKey);
-        } else {
-            builder.append("?");
-        }
-        builder.append(m_separator);
-        if (null != rightKey) {
-            builder.append(rightKey);
-        } else {
-            builder.append("?");
-        }
-        return new RowKey(builder.toString());
-    }
-
+    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey);
 }

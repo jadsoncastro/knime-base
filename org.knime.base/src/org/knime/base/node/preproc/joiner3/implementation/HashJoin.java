@@ -46,15 +46,16 @@
  * History
  *   Apr 27, 2020 (carlwitt): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner3.implementation;
 
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.function.Consumer;
 
 import org.knime.base.data.sort.SortedTable;
-import org.knime.base.node.preproc.joiner.Joiner2Settings;
-import org.knime.base.node.preproc.joiner.Joiner2Settings.CompositionMode;
-import org.knime.base.node.preproc.joiner.implementation.OutputRow.Settings;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
+import org.knime.base.node.preproc.joiner3.implementation.OutputRow.Settings;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.BufferedDataTable;
@@ -64,23 +65,20 @@ import org.knime.core.node.InvalidSettingsException;
 
 /**
  *
- * For each row in the outer table, iterates over the inner table and generates an output column if the rows have
- * equal values in all specified column pairs.
- *
  * This currently supports conjunctive (rows must match on every column pair) equijoins only.
  *
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
  *
  */
-public class NestedLoop extends AbstractJoiner {
+public class HashJoin extends AbstractJoiner {
 
     /**
      * @param leftTableSpec
      * @param rightTableSpec
      * @param settings
      */
-    public NestedLoop(final DataTableSpec leftTableSpec, final DataTableSpec rightTableSpec, final Joiner2Settings settings) {
-        super(leftTableSpec, rightTableSpec, settings);
+    public HashJoin(final Joiner3Settings settings,final BufferedDataTable outer, final BufferedDataTable...innerTables) {
+        super(settings, outer, innerTables);
         // TODO Auto-generated constructor stub
     }
 
@@ -96,7 +94,8 @@ public class NestedLoop extends AbstractJoiner {
      * @throws InvalidSettingsException when inconsistent settings are provided
      */
     @Override
-    public BufferedDataTable computeJoinTable(final BufferedDataTable leftTable, final BufferedDataTable rightTable, final ExecutionContext exec)
+    public BufferedDataTable computeJoinTable(final BufferedDataTable leftTable,
+        final BufferedDataTable rightTable, final ExecutionContext exec, final Consumer<String> runtimeWarningHandler)
     throws CanceledExecutionException, InvalidSettingsException {
 
         m_runtimeWarnings.clear();

@@ -45,7 +45,7 @@
  * History
  *   25.11.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner;
 
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTable;

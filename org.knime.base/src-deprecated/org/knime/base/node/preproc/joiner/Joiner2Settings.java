@@ -158,7 +158,7 @@ public class Joiner2Settings {
 
 
     /** Internally used row key identifier. */
-    public static final String ROW_KEY_IDENTIFIER = "$RowID$";
+    static final String ROW_KEY_IDENTIFIER = "$RowID$";
 
 
 

@@ -1,6 +1,5 @@
 /*
  * ------------------------------------------------------------------------
- *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -41,61 +40,28 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ---------------------------------------------------------------------
- * 
+ * ------------------------------------------------------------------------
+ *
  * History
- *   Apr 27, 2020 (carlwitt): created
+ *   16.12.2009 (Heiko Hofer): created
  */
-package org.knime.base.node.preproc.joiner.implementation;
+package org.knime.base.node.preproc.joiner3.implementation;
 
-import java.util.List;
-
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.BufferedDataTable;
-import org.knime.core.node.CanceledExecutionException;
-import org.knime.core.node.ExecutionContext;
-import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.data.RowKey;
 
 /**
- * 
- * @author carlwitt
+ * This implementation uses one of the given row keys as the joined row key. It
+ * uses the one which is not null or the left key if both are not null.
+ *
+ * @author Heiko Hofer
  */
-public interface Joiner {
+public class UseSingleRowKeyFactory implements JoinedRowKeyFactory {
 
     /**
-     * Get warnings which occurred when processing the method
-     * <code>getOutputSpec</code>.
-     * @return The warning messages.
+     * {@inheritDoc}
      */
-    List<String> getConfigWarnings();
-
-    /**
-     * Get warnings which occurred when processing the method
-     *  <code>computeJoinTable</code>.
-     * @return The warning messages.
-     */
-    List<String> getRuntimeWarnings();
-
-    /**
-     * Create the DataTableSpec of the output.
-     *
-     * @return The DataTableSpec of the output.
-     * @throws InvalidSettingsException if the settings are inconsistent with
-     *             the DataTableSpec elements given in the Constructor.
-     */
-    DataTableSpec getOutputSpec() throws InvalidSettingsException;
-
-    /**
-     * Joins the <code>leftTable</code> and the <code>rightTable</code>.
-     *
-     * @param leftTable The left input table.
-     * @param rightTable The right input table.
-     * @param exec The Execution monitor for this execution.
-     * @return The joined table.
-     * @throws CanceledExecutionException when execution is canceled
-     * @throws InvalidSettingsException when inconsistent settings are provided
-     */
-    BufferedDataTable computeJoinTable(BufferedDataTable leftTable, BufferedDataTable rightTable, ExecutionContext exec)
-        throws CanceledExecutionException, InvalidSettingsException;
+    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
+        return null != leftKey ? leftKey : rightKey;
+    }
 
 }
