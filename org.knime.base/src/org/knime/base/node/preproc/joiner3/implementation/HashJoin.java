@@ -49,15 +49,19 @@
 package org.knime.base.node.preproc.joiner3.implementation;
 
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
-import org.knime.base.data.sort.SortedTable;
+import org.knime.base.data.join.JoinedTable;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
-import org.knime.base.node.preproc.joiner3.implementation.OutputRow.Settings;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
+import org.knime.core.data.RowKey;
+import org.knime.core.data.sort.BufferedDataTableSorter;
+import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -73,209 +77,217 @@ import org.knime.core.node.InvalidSettingsException;
 public class HashJoin extends AbstractJoiner {
 
     /**
-     * @param leftTableSpec
-     * @param rightTableSpec
-     * @param settings
      */
-    public HashJoin(final Joiner3Settings settings,final BufferedDataTable outer, final BufferedDataTable...innerTables) {
-        super(settings, outer, innerTables);
+    public HashJoin(final Joiner3Settings settings, final BufferedDataTable outer,
+        final BufferedDataTable... innerTables) {
+        super(settings, outer, innerTables[0]);
         // TODO Auto-generated constructor stub
     }
 
+
+
     /**
-     * Joins the <code>leftTable</code> and the <code>rightTable</code>.
-     *
-     * @param joiner TODO
-     * @param leftTable The left input table.
-     * @param rightTable The right input table.
-     * @param exec The Execution monitor for this execution.
-     * @return The joined table.
-     * @throws CanceledExecutionException when execution is canceled
-     * @throws InvalidSettingsException when inconsistent settings are provided
      */
     @Override
-    public BufferedDataTable computeJoinTable(final BufferedDataTable leftTable,
-        final BufferedDataTable rightTable, final ExecutionContext exec, final Consumer<String> runtimeWarningHandler)
-    throws CanceledExecutionException, InvalidSettingsException {
-
-        m_runtimeWarnings.clear();
-        m_leftRowKeyMap.clear();
-        m_rightRowKeyMap.clear();
+    public BufferedDataTable computeJoinTable(final BufferedDataTable leftTable, final BufferedDataTable rightTable,
+        final ExecutionContext exec, final Consumer<String> runtimeWarningHandler)
+        throws CanceledExecutionException, InvalidSettingsException {
 
         // This does some input data checking, too
-        DataTableSpec joinedTableSpec = createSpec(new DataTableSpec[] {
-                leftTable.getDataTableSpec(),
-                rightTable.getDataTableSpec()});
+//        DataTableSpec joinedTableSpec = createSpec(new DataTableSpec[] {
+//                leftTable.getDataTableSpec(),
+//                rightTable.getDataTableSpec()}, m_settings, IGNORE_WARNINGS);
 
-        BufferedDataTable outerTable = rightTable;
-        BufferedDataTable innerTable = leftTable;
 
-        //  TODO split logic to a disjunctive part. if multipleMatchCanOccur is true, to rows can be match more than
-        // once. This is in general met with the MatchAny Option but only if
-        // there are more than one join column.
-        m_matchAny = m_settings.getCompositionMode()
-            .equals(CompositionMode.MatchAny)
-            && m_settings.getLeftJoinColumns().length > 1;
-           // TODO split logic with outer joins?
-        if (m_retainLeft && m_matchAny) {
-            m_globalLeftOuterJoins = new HashSet<Integer>();
-            for (int i = 0; i < leftTable.getRowCount(); i++) {
-                m_globalLeftOuterJoins.add(i);
+
+        // build a hash index of the smaller table
+
+        Map<JoinTuple, List<DataRow>> index;
+        // TODO maybe the join tuple can be stripped and DataCell[] used directly, depends on whether custom comparison logic is needed
+
+        exec.setProgress("Building Hash Table");
+
+        //---------------------------------------------
+        // build index
+        //---------------------------------------------
+
+        long before = System.currentTimeMillis();
+
+        // TODO
+        // try to estimate index size? probably too difficult, maybe use size estimate of future API
+        // or try build index and choose different implementation if failed
+        index =
+            StreamSupport.stream(m_smaller.spliterator(), false).collect(Collectors.groupingBy(getExtractor(m_smaller)));
+
+        long after = System.currentTimeMillis();
+        System.out.println("Indexing: " + (after-before));
+
+        //---------------------------------------------
+        // build table spec
+        //---------------------------------------------
+
+
+        // FIXME do the projections
+        // just concat the columns of the left table with the right table
+        DataTableSpec joinedTableSpec = new JoinedTable(leftTable, rightTable, JoinedTable.METHOD_APPEND_SUFFIX, " (#1)", true).getDataTableSpec();
+
+        //---------------------------------------------
+        // do join
+        //---------------------------------------------
+
+        exec.setProgress("Joining");
+
+        // keep in memory, flush to disk if necessary
+        // blocks adding more rows if it gets too full
+        BufferedDataContainer result = exec.createDataContainer(joinedTableSpec);
+
+        long matchNumber = 0;
+        long rowIndex = 0;
+
+        // only get columns that are needed (join attributes and retained
+//        bigger.filter(TableFilter.materializeCols(1,2,3));
+
+        // very full even after GC
+//        MemoryAlertSystem.getInstance().isMemoryLow()
+        // heap ca 65% full
+//        MemoryAlertSystem.getInstanceUncollected();
+
+        before = System.currentTimeMillis();
+
+        Extractor biggerJoinAttributes = getExtractor(m_bigger);
+
+
+        for(DataRow row : m_bigger) {
+
+            exec.checkCanceled();
+
+            JoinTuple query = biggerJoinAttributes.apply(row);
+            List<DataRow> matches = index.get(query);
+            if(matches == null) {
+                continue;
             }
-        }
 
-        /* m_joiningIndices HashMap<K,V>  (id=235)
-         * {Right=[-1], Left=[-1]}
-         * m_matchAny   false
-         */
-        m_inputDataRowSettings = createInputDataRowSettings(leftTable,
-                rightTable);
-        /*
-         * [0, 1, 2, 3, 4]
-         */
-        int[] rightSurvivors = getIndicesOf(rightTable, m_rightSurvivors);
-        /* rightTableSurvivors: {
-         *  m_spec:
-         *      name=default,columns=[0; 1; 2; 3; 4; 5; 6; 7];
-         *  m_rightTableSurvivors:
-         *      [0, 1, 2, 3, 4]}
-         */
-        m_outputDataRowSettings = new Settings(
-                rightTable.getDataTableSpec(),
-                rightSurvivors);
+            exec.setProgress(1.*rowIndex/m_bigger.getRowCount());
 
-        // stores rows of the composite table
-        JoinContainer joinCont = new JoinContainer(
-                m_outputDataRowSettings);
+            for(DataRow match : matches) {
+                DataRow outer = getOuter(row, match);
+                DataRow inner = getInner(row, match);
 
-        double[] progressIntervals = new double[] {0.6, 0.2, 0.2};
-        exec.setProgress(0.0);
-        performJoin(innerTable, outerTable,
-                joinCont, exec, progressIntervals[0]);
-
-
-        if (m_retainLeft && m_matchAny) {
-            // Add left outer joins
-            int c = 0;
-            for (Integer index : m_globalLeftOuterJoins) {
-                DataRow outRow = OutputRow.createDataRow(c, index, -1,
-                        m_outputDataRowSettings);
-                joinCont.addLeftOuter(outRow, exec);
-                c++;
+                RowKey newRowKey = concatRowKeys(outer, inner);
+                result.addRowToTable(new JoinedRow(newRowKey, outer, inner));
             }
+
+            rowIndex++;
+
         }
-        joinCont.close();
+        result.close();
 
-        // numbers are needed to report progress more precisely
-        long totalNumJoins = joinCont.getRowCount();
-        long numMatches = null != joinCont.getMatches() ? joinCont.getMatches().size() : 0;
-        long numLeftOuter = null != joinCont.getLeftOuter() ? joinCont.getLeftOuter().size() : 0;
-        long numRightOuter = null != joinCont.getRightOuter() ? joinCont.getRightOuter().size() : 0;
+        after = System.currentTimeMillis();
+        System.out.println("Joining: " + (after-before));
+        before = System.currentTimeMillis();
 
-        exec.setMessage("Sort Joined Partitions");
-        Comparator<DataRow> joinComp = OutputRow.createRowComparator();
-        SortedTable matches = null != joinCont.getMatches()
-        ? new SortedTable(joinCont.getMatches(), joinComp, false,
-                exec.createSubExecutionContext(
-                        progressIntervals[1] * numMatches / totalNumJoins))
-        : null;
-        SortedTable leftOuter = null != joinCont.getLeftOuter()
-        ? new SortedTable(joinCont.getLeftOuter(), joinComp, false,
-                exec.createSubExecutionContext(
-                        progressIntervals[1] * numLeftOuter / totalNumJoins))
-        : null;
-        SortedTable rightOuter = null != joinCont.getRightOuter()
-        ? new SortedTable(joinCont.getRightOuter(), joinComp, false,
-                exec.createSubExecutionContext(
-                        progressIntervals[1] * numRightOuter / totalNumJoins))
-        : null;
+        BufferedDataTable bdt = result.getTable();
 
-        exec.setMessage("Merge Joined Partitions");
-        // Build sorted table
-        int[] leftSurvivors = getIndicesOf(leftTable, m_leftSurvivors);
+        return bdt;
 
-        DataHiliteOutputContainer oc =
-            new DataHiliteOutputContainer(joinedTableSpec,
-                    m_settings.getEnableHiLite(), leftTable,
-                    leftSurvivors, rightSurvivors,
-                    createRowKeyFactory(leftTable, rightTable));
-        oc.addTableAndFilterDuplicates(matches,
-                exec.createSubExecutionContext(
-                        progressIntervals[2] * numMatches / totalNumJoins));
-        oc.addTableAndFilterDuplicates(leftOuter,
-                exec.createSubExecutionContext(
-                        progressIntervals[2] * numLeftOuter / totalNumJoins));
-        oc.addTableAndFilterDuplicates(rightOuter,
-                exec.createSubExecutionContext(
-                        progressIntervals[2] * numRightOuter / totalNumJoins));
-        oc.close();
+        //---------------------------------------------
+        // sort
+        //---------------------------------------------
 
-        m_leftRowKeyMap = oc.getLeftRowKeyMap();
-        m_rightRowKeyMap = oc.getRightRowKeyMap();
-
-        return oc.getTable();
+//        BufferedDataTableSorter bdts = new BufferedDataTableSorter(bdt, Comparator.comparing((final DataRow r) -> r.getKey().getString()));
+//
+//        exec.setProgress("Sorting");
+//        BufferedDataTable sorted = bdts.sort(exec);
+//        after = System.currentTimeMillis();
+//        System.out.println("Sorting: " + (after-before));
+//        return sorted;
     }
 
-    /** This method start with reading the partitions of the left table defined
-     * in currParts. If memory is low, partitions will be skipped or the
-     * number of partitions will be raised which leads to smaller partitions.
-     * Successfully read partitions will be joined. The return collection
-     * defines the successfully processed partitions.
-     *
-     * @param leftTable The inner input table.
-     * @param rightTable The right input table.
-     * @param outputContainer The container used for storing matches.
-     * @param pendingParts The parts that are not processed yet.
-     * @param exec The execution context.
-     * @param progressDiff The difference in the progress monitor.
-     * @return The partitions that were successfully processed (read + joined).
-     * @throws CanceledExecutionException when execution is canceled
-     */
-    JoinContainer performJoin(
-            final BufferedDataTable leftTable,
-            final BufferedDataTable rightTable,
-            final JoinContainer outputContainer,
-            final ExecutionContext exec,
-            final double progressDiff) throws CanceledExecutionException  {
-        // Update increment for reporting progress
-        double progress = 0;
-        double numPairs = leftTable.size() * rightTable.size();
-        double inc = 1./numPairs;
+    @Deprecated
+    public BufferedDataTable computeJoinTableParallel(final BufferedDataTable leftTable, final BufferedDataTable rightTable,
+        final ExecutionContext exec, final Consumer<String> runtimeWarningHandler)
+        throws CanceledExecutionException, InvalidSettingsException {
 
-        int counter = 0;
-        for (DataRow left : leftTable) {
+        // This does some input data checking, too
+        //    DataTableSpec joinedTableSpec = createSpec(new DataTableSpec[] {
+        //            leftTable.getDataTableSpec(),
+        //            rightTable.getDataTableSpec()}, m_settings, IGNORE_WARNINGS);
 
-            InputRow leftRow = new InputRow(left, counter,
-                InputRow.Settings.InDataPort.Left,
-                m_inputDataRowSettings);
+        BufferedDataTable[] ordered = new BufferedDataTable[]{leftTable, rightTable};
+        boolean leftIsBigger = leftTable.getRowCount() >= rightTable.getRowCount();
+        int biggerIndex = leftIsBigger ? 0 : 1;
+        int smallerIndex = 1 - biggerIndex;
+        BufferedDataTable bigger = ordered[biggerIndex];
+        BufferedDataTable smaller = ordered[smallerIndex];
 
-            for (DataRow right : rightTable) {
-                progress += inc;
-                exec.getProgressMonitor().setProgress(progress);
-                exec.checkCanceled();
+        // build a hash index of the smaller table
+        Map<JoinTuple, List<DataRow>> index;
+        // TODO maybe the join tuple can be stripped and DataCell[] used directly, depends on whether custom comparison logic is needed
 
-                InputRow rightRow = new InputRow(right, counter,
-                    InputRow.Settings.InDataPort.Right,
-                    m_inputDataRowSettings);
+        Extractor smallerJoinAttributes = getExtractor(smaller);
+        Extractor biggerJoinAttributes = getExtractor(bigger);
 
-                if(rightRow.getJoinTuples()[0].equals(leftRow.getJoinTuples()[0])) {
+        exec.setProgress("Building Hash Table");
 
-                    DataRow outRow = OutputRow.createDataRow(
-                        outputContainer.getRowCount(),
-                        leftRow.getIndex(), rightRow.getIndex(),
-                        right,
-                        m_outputDataRowSettings);
-                    outputContainer.addMatch(outRow, exec);
-                }
+        index = StreamSupport.stream(smaller.spliterator(), false).collect(Collectors.groupingBy(smallerJoinAttributes));
 
+        // FIXME do the projections
+        // just concat the columns of the left table with the right table
+        DataTableSpec joinedTableSpec =
+            new JoinedTable(leftTable, rightTable, JoinedTable.METHOD_APPEND_SUFFIX, "_right", true).getDataTableSpec();
 
-            }
+        exec.setProgress("Joining");
 
-            counter++;
-        }
+        // add
+        //    exec.checkCanceled()
+        System.out.println("PARALLEL");
+        BufferedDataContainer result =
+            StreamSupport.stream(bigger.spliterator(), false).collect(() -> exec.createDataContainer(joinedTableSpec),
+                (final BufferedDataContainer partial, final DataRow row) -> {
 
-        return outputContainer;
+                    JoinTuple query = biggerJoinAttributes.apply(row);
+                    List<DataRow> matches = index.get(query);
+                    if (matches != null) {
+
+//                        exec.setProgress(1. * rowIndex / bigger.getRowCount());
+                        //        System.out.println(String.format("Progress: %.1f%%", 100.*rowIndex/bigger.getRowCount()));
+
+                        for (DataRow match : matches) {
+                            try {
+                                exec.checkCanceled();
+                            } catch (CanceledExecutionException e) {
+                                break;
+                            }
+                            DataRow left = leftIsBigger ? row : match;
+                            DataRow right = leftIsBigger ? match : row;
+                            RowKey newRowKey = new RowKey(left.getKey().getString() + right.getKey().getString());
+                            partial.addRowToTable(new JoinedRow(newRowKey, left, right));
+                        }
+
+                    }
+
+                }, HashJoin::addAll);
+
+        result.close();
+
+        // OUTDATED
+        BufferedDataTable bdt = result.getTable();
+
+        BufferedDataTableSorter bdts = new BufferedDataTableSorter(bdt, Comparator.comparing((final DataRow r) -> r.getKey().getString()));
+
+        exec.setProgress("Sorting");
+        return bdts.sort(exec);
+
     }
 
+//    private BufferedDataContainer accumulatorSupplier() {
+//        return
+
+    private static void addAll(final BufferedDataContainer master, final BufferedDataContainer partial) {
+        if(!partial.isClosed()) {
+            partial.close();
+        }
+        partial.getTable().forEach(row -> master.addRowToTable(row));
+    }
 
 }

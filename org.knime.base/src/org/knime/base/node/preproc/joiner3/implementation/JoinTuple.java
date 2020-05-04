@@ -106,5 +106,10 @@ class JoinTuple {
         }
         return true;
     }
+
+    @Override
+    public String toString() {
+        return Arrays.toString(m_cells);
+    }
 }
 

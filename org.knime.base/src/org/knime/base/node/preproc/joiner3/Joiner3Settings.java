@@ -52,7 +52,6 @@ import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory.JoinAlgo
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
-import org.knime.core.node.defaultnodesettings.SettingsModelEnum;
 
 /**
  * This class hold the settings for the joiner node.
@@ -62,45 +61,65 @@ import org.knime.core.node.defaultnodesettings.SettingsModelEnum;
 public class Joiner3Settings {
 
     private static final String COPOSITION_MODE = "compositionMode";
+
     private static final String JOIN_MODE = "joinMode";
+
     private static final String LEFT_JOINING_COLUMNS = "leftTableJoinPredicate";
-    private static final String RIGHT_JOINING_COLUMNS =
-        "rightTableJoinPredicate";
+
+    private static final String RIGHT_JOINING_COLUMNS = "rightTableJoinPredicate";
+
     private static final String DUPLICATE_COLUMN_HANDLING = "duplicateHandling";
+
     private static final String DUPLICATE_COLUMN_SUFFIX = "suffix";
+
     private static final String LEFT_INCLUDE_COLUMNS = "leftIncludeCols";
+
     private static final String LEFT_INCLUDE_ALL = "leftIncludeAll";
+
     private static final String REMOVE_LEFT_JOINING_COLUMNS = "rmLeftJoinCols";
+
     private static final String RIGHT_INCLUDE_COLUMNS = "rightIncludeCols";
+
     private static final String RIGHT_INCLUDE_ALL = "rightIncludeAll";
-    private static final String REMOVE_RIGHT_JOINING_COLUMNS =
-        "rmRightJoinCols";
+
+    private static final String REMOVE_RIGHT_JOINING_COLUMNS = "rmRightJoinCols";
+
     private static final String MAX_OPEN_FILES = "maxOpenFiles";
+
     private static final String ROW_KEY_SEPARATOR = "rowKeySeparator";
+
     private static final String ENABLE_HILITE = "enableHiLite";
+
     private static final String VERSION = "version";
 
+    private static final String JOIN_ALGORITHM_KEY = "joinAlgorithm";
 
-    private SettingsModelEnum<JoinerFactory.JoinAlgorithm> m_joinAlgorithm =
-        new SettingsModelEnum<>("JOIN_ALGORITHM", JoinerFactory.JoinAlgorithm.AUTO);
+    private JoinerFactory.JoinAlgorithm m_joinAlgorithm = JoinerFactory.JoinAlgorithm.AUTO;
 
     /**
      * The version for Joiner nodes until KNIME v2.6.
+     *
      * @since 2.7
      */
     public static final String VERSION_1 = "version_1";
+
     /**
      * The version for Joiner nodes for KNIME v2.7.
+     *
      * @since 2.7
      */
     public static final String VERSION_2 = "version_2";
+
     /**
      * The version for Joiner nodes for KNIME v2.7.1 and later. Partial revert of Bug 3368 (see Bug 3916).
+     *
      * @since 2.7
      */
     public static final String VERSION_2_1 = "version_2.1";
+
     /**
      * The version for Joiner nodes for KNIME v2.8 and later.
+     *
      * @since 2.9
      */
     public static final String VERSION_3 = "version_3";
@@ -512,7 +531,7 @@ public class Joiner3Settings {
     public void loadSettings(final NodeSettingsRO settings)
             throws InvalidSettingsException {
         // load version introduced in 2.7
-        m_joinAlgorithm.loadSettingsFrom(settings);
+        m_joinAlgorithm = JoinAlgorithm.valueOf(settings.getString(JOIN_ALGORITHM_KEY));
 
         m_version = settings.getString(VERSION, VERSION_1);
 
@@ -556,49 +575,32 @@ public class Joiner3Settings {
     public void loadSettingsForDialog(final NodeSettingsRO settings) {
         // load version introduced in 2.7
 
-        try {
-            m_joinAlgorithm.loadSettingsFrom(settings);
-        } catch (InvalidSettingsException e) {
-            System.err.println("Can't load join algorithm settings in loadSettingsForDialog");
-        }
+        m_joinAlgorithm = JoinAlgorithm.valueOf(settings.getString(JOIN_ALGORITHM_KEY, m_joinAlgorithm.name()));
 
         m_version = settings.getString(VERSION, VERSION_1);
 
-        m_duplicateHandling =
-                DuplicateHandling.valueOf(settings.getString(
-                        DUPLICATE_COLUMN_HANDLING,
-                        DuplicateHandling.AppendSuffix.toString()));
-        if (m_version.equals(VERSION_2)
-                && m_duplicateHandling.equals(DuplicateHandling.AppendSuffix)) {
+        m_duplicateHandling = DuplicateHandling
+            .valueOf(settings.getString(DUPLICATE_COLUMN_HANDLING, DuplicateHandling.AppendSuffix.toString()));
+        if (m_version.equals(VERSION_2) && m_duplicateHandling.equals(DuplicateHandling.AppendSuffix)) {
             m_duplicateHandling = DuplicateHandling.AppendSuffixAutomatic;
         }
         m_compositionMode =
-            CompositionMode.valueOf(settings.getString(
-                    COPOSITION_MODE, CompositionMode.MatchAll.toString()));
-        m_joinMode =
-                JoinMode.valueOf(settings.getString(JOIN_MODE,
-                        JoinMode.InnerJoin.toString()));
+            CompositionMode.valueOf(settings.getString(COPOSITION_MODE, CompositionMode.MatchAll.toString()));
+        m_joinMode = JoinMode.valueOf(settings.getString(JOIN_MODE, JoinMode.InnerJoin.toString()));
         m_leftJoinColumns =
-            settings.getStringArray(LEFT_JOINING_COLUMNS,
-                    new String[] {Joiner3Settings.ROW_KEY_IDENTIFIER});
+            settings.getStringArray(LEFT_JOINING_COLUMNS, new String[]{Joiner3Settings.ROW_KEY_IDENTIFIER});
         m_rightJoinColumns =
-            settings.getStringArray(RIGHT_JOINING_COLUMNS,
-                    new String[] {Joiner3Settings.ROW_KEY_IDENTIFIER});
-        m_duplicateColSuffix = settings.getString(DUPLICATE_COLUMN_SUFFIX,
-                                                  "(*)");
+            settings.getStringArray(RIGHT_JOINING_COLUMNS, new String[]{Joiner3Settings.ROW_KEY_IDENTIFIER});
+        m_duplicateColSuffix = settings.getString(DUPLICATE_COLUMN_SUFFIX, "(*)");
 
-        m_leftIncludeCols = settings.getStringArray(LEFT_INCLUDE_COLUMNS,
-                new String[0]);
-        m_rightIncludeCols = settings.getStringArray(RIGHT_INCLUDE_COLUMNS,
-                new String[0]);
+        m_leftIncludeCols = settings.getStringArray(LEFT_INCLUDE_COLUMNS, new String[0]);
+        m_rightIncludeCols = settings.getStringArray(RIGHT_INCLUDE_COLUMNS, new String[0]);
 
         m_leftIncludeAll = settings.getBoolean(LEFT_INCLUDE_ALL, true);
         m_rightIncludeAll = settings.getBoolean(RIGHT_INCLUDE_ALL, true);
 
-        m_rmLeftJoinCols = settings.getBoolean(REMOVE_LEFT_JOINING_COLUMNS,
-                false);
-        m_rmRightJoinCols = settings.getBoolean(REMOVE_RIGHT_JOINING_COLUMNS,
-                true);
+        m_rmLeftJoinCols = settings.getBoolean(REMOVE_LEFT_JOINING_COLUMNS, false);
+        m_rmRightJoinCols = settings.getBoolean(REMOVE_RIGHT_JOINING_COLUMNS, true);
         m_maxOpenFiles = settings.getInt(MAX_OPEN_FILES, 200);
         m_rowKeySeparator = settings.getString(ROW_KEY_SEPARATOR, "_");
         m_enableHiLite = settings.getBoolean(ENABLE_HILITE, false);
@@ -613,7 +615,7 @@ public class Joiner3Settings {
      */
     public void saveSettings(final NodeSettingsWO settings) {
 
-        m_joinAlgorithm.saveSettingsTo(settings);
+        settings.addString(JOIN_ALGORITHM_KEY, m_joinAlgorithm.name());
 
         settings.addString(DUPLICATE_COLUMN_HANDLING,
                 m_duplicateHandling.toString());
@@ -646,10 +648,10 @@ public class Joiner3Settings {
     }
 
     public JoinAlgorithm getJoinAlgorithm() {
-        return m_joinAlgorithm.getValue();
+        return m_joinAlgorithm;
     }
 
     public void setJoinAlgorithm(final JoinAlgorithm joinAlgorithm) {
-        m_joinAlgorithm.setValue(joinAlgorithm);
+        m_joinAlgorithm = joinAlgorithm;
     }
 }

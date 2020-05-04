@@ -63,6 +63,6 @@ import org.knime.core.node.BufferedDataTable;
 public class CostModelFactory {
 
     static AbstractJoiner create(final Joiner3Settings settings, final BufferedDataTable outer, final BufferedDataTable...innerTables ) {
-        return new NestedLoopJoin(settings, outer, innerTables);
+        return new HashJoin(settings, outer, innerTables);
     }
 }
