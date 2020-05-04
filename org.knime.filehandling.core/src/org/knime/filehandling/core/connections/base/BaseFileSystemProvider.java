@@ -251,6 +251,11 @@ public abstract class BaseFileSystemProvider<P extends FSPath, F extends BaseFil
     public InputStream newInputStream(final Path path, final OpenOption... options) throws IOException {
         checkOpenOptionsForReading(options);
         final P checkedPath = checkCastAndAbsolutizePath(path);
+
+        if (!existsCached(checkedPath)) {
+            throw new NoSuchFileException(checkedPath.toString());
+        }
+
         return new BaseInputStream(newInputStreamInternal(checkedPath, options), getFileSystemInternal());
     }
 
