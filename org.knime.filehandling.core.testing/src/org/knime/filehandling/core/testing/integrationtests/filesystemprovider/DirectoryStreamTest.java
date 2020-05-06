@@ -45,11 +45,17 @@
  */
 package org.knime.filehandling.core.testing.integrationtests.filesystemprovider;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.nio.file.DirectoryStream;
+import java.nio.file.DirectoryStream.Filter;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -102,15 +108,38 @@ public class DirectoryStreamTest extends AbstractParameterizedFSTest {
         assertTrue(paths.isEmpty());
     }
 
-    @Test(expected = NoSuchFileException.class)
-    public void test_non_existent_directory() throws Exception {
-        final Path directory = m_testInitializer.getRoot().resolve("doesnotexist");
+    @Test
+    public void test_list_files_with_filter() throws IOException {
+        final Path fileA = m_testInitializer.createFileWithContent("contentA", "dir", "fileA");
+        final Path fileB = m_testInitializer.createFileWithContent("contentB", "dir", "fileB");
+        final Path fileC = m_testInitializer.createFileWithContent("contentC", "dir", "fileC");
+        final Path directory = fileA.getParent();
 
+        final Filter<Path> filter = path -> path.getFileName().toString().equals("fileB");
         final List<Path> paths = new ArrayList<>();
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory, (path) -> true)) {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory, filter)) {
             directoryStream.forEach(paths::add);
         }
 
-        assertTrue(paths.isEmpty());
+        assertEquals(1, paths.size());
+        assertTrue(paths.contains(fileB));
+    }
+
+    @Test(expected = NoSuchFileException.class)
+    public void test_non_existent_directory() throws IOException {
+        final Path directory = m_testInitializer.getRoot().resolve("doesnotexist");
+
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory, (path) -> true)) {
+            fail("should fail with NoSuchFileException and never reach this code");
+        }
+    }
+
+    @Test(expected = NotDirectoryException.class)
+    public void test_list_file_instead_of_directory() throws IOException {
+        final Path file = m_testInitializer.createFileWithContent("test", "some-dir", "some-file");
+
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(file, path -> true)) {
+            fail("should fail with before");
+        }
     }
 }
