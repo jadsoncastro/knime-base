@@ -43,7 +43,7 @@ public class InputStreamTest extends AbstractParameterizedFSTest {
 		Path file = m_testInitializer.createFile("dir", "fileName");
 		Path nonExistingFile = file.getParent().resolve("non-existing");
 		try (InputStream inputStream = Files.newInputStream(nonExistingFile)) {
-			
+			inputStream.read(); // try to read
 		}
 	}
 }

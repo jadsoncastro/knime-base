@@ -4,11 +4,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.Test;
@@ -82,19 +87,39 @@ public class MoveTest extends AbstractParameterizedFSTest {
 		
 		Files.move(source, target);
 	}
-	
-	@Test
-	public void test_renaming_a_file() throws Exception {
-		String sourceContent = "The source content";
-		Path source = m_testInitializer.createFileWithContent(sourceContent, "dir", "fileA");
-		Path target = source.getParent().resolve("fileB");
 
-		Files.move(source, target);
+	@Test
+	public void test_move_file_to_itself() throws Exception {
+		final String testContent = "Some simple test content";
+		final Path source = m_testInitializer.createFileWithContent(testContent, "dirA", "fileA");
+
+		Files.move(source, source, StandardCopyOption.REPLACE_EXISTING);
+
+		assertTrue(Files.exists(source));
+		final List<String> copiedContent = Files.readAllLines(source);
+		assertEquals(1, copiedContent.size());
+		assertEquals(testContent, copiedContent.get(0));
+	}
+
+	@Test(expected = FileAlreadyExistsException.class)
+	public void test_move_directory_to_other_directory() throws Exception {
+		final String testContent = "Some simple test content";
+		final Path dirA = m_testInitializer.createFileWithContent(testContent, "dirA", "fileA").getParent();
+		final Path dirB = m_testInitializer.createFileWithContent(testContent, "dirB", "fileB").getParent();
+
+		Files.copy(dirA, dirB);
+
+		assertTrue(Files.exists(dirB.resolve("dirA").resolve("fileA")));
+	}
+
+	@Test(expected = DirectoryNotEmptyException.class)
+	public void test_move_directory_with_replace_to_non_empty_existing_directory() throws Exception {
+		final String testContent = "Some simple test content";
+		final Path dirA = m_testInitializer.createFileWithContent(testContent, "dirA", "fileA").getParent();
+		final Path dirB = m_testInitializer.createFileWithContent(testContent, "dirB", "fileB").getParent();
+
+		Files.move(dirA, dirB, StandardCopyOption.REPLACE_EXISTING);
 		
-		assertFalse(Files.exists(source));
-		assertTrue(Files.exists(target));
-		List<String> renamedContent = Files.readAllLines(target);
-		assertEquals(sourceContent, renamedContent.get(0));
 	}
 	
 }
