@@ -64,7 +64,7 @@ public class LocalFSTestInitializerProvider implements FSTestInitializerProvider
 
     @Override
     public FSTestInitializer setup(final Map<String, String> configuration) {
-        return new LocalFSTestInitializer(configuration.get("root"));
+        return new LocalFSTestInitializer();
     }
 
     @Override

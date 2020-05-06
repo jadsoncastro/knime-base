@@ -34,4 +34,20 @@ public interface FSTestInitializerProvider {
      */
     public String getFSType();
 
+    /**
+     * Get a parameter from the given configuration or fail with an exception if parameter is missing.
+     *
+     * @param config configuration with file system parameters
+     * @param key request configuration key
+     * @return value of given key in configuration
+     * @throws IllegalArgumentException if configuration does not contain given key
+     */
+    default String getParameter(final Map<String, String> config, final String key) {
+        if (!config.containsKey(key)) {
+            throw new IllegalArgumentException(
+                "Required parameter '" + getFSType() + "." + key + "' not found in fs params.");
+        } else {
+            return config.get(key);
+        }
+    }
 }

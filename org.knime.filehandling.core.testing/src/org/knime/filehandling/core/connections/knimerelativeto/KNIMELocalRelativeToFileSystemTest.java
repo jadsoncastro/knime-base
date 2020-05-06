@@ -50,10 +50,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.knime.filehandling.core.connections.knimerelativeto.LocalRelativeToFSTestInitializer.createWorkflowDir;
 import static org.knime.filehandling.core.connections.knimerelativeto.LocalRelativeToFSTestInitializer.getWorkflowManager;
+import static org.knime.filehandling.core.testing.integrationtests.AbstractParameterizedFSTest.getDummyWorkflowPath;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -65,6 +68,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.workflow.NodeContext;
 import org.knime.core.node.workflow.WorkflowManager;
 import org.knime.filehandling.core.connections.local.LocalFileSystemProvider;
@@ -81,16 +85,16 @@ public class KNIMELocalRelativeToFileSystemTest {
 
     private File m_mountpointRoot;
 
-    private Path m_currentWorkflow;
-
     private WorkflowManager m_workflowManager;
+
+    private Path m_dummyWorkflow = getDummyWorkflowPath();
 
     @Before
     public void beforeTestCase() throws IOException {
         m_mountpointRoot = m_tempFolder.newFolder("mountpoint-root");
-        m_currentWorkflow = createWorkflowDir(m_mountpointRoot.toPath(), "current-workflow");
-        createWorkflowDir(m_mountpointRoot.toPath(), "other-workflow");
-        m_workflowManager = getWorkflowManager(m_mountpointRoot, m_currentWorkflow, false);
+        final Path currentWorkflow = createWorkflowDir(m_dummyWorkflow, m_mountpointRoot.toPath(), "current-workflow");
+        createWorkflowDir(m_dummyWorkflow, m_mountpointRoot.toPath(), "other-workflow");
+        m_workflowManager = getWorkflowManager(m_mountpointRoot, currentWorkflow, false);
         NodeContext.pushContext(m_workflowManager);
     }
 
@@ -108,7 +112,7 @@ public class KNIMELocalRelativeToFileSystemTest {
         // replace the current workflow manager with a server side workflow manager
         NodeContext.removeLastContext();
         final File mountpointRoot = m_tempFolder.newFolder("other-mountpoint-root");
-        final Path currentWorkflow = createWorkflowDir(mountpointRoot.toPath(), "current-workflow");
+        final Path currentWorkflow = createWorkflowDir(m_dummyWorkflow, mountpointRoot.toPath(), "current-workflow");
         m_workflowManager = getWorkflowManager(mountpointRoot, currentWorkflow, true);
         NodeContext.pushContext(m_workflowManager);
 

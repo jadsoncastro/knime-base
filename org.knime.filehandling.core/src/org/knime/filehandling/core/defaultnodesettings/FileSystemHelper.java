@@ -125,7 +125,7 @@ public class FileSystemHelper {
                 .getFSConnectionProvider("knime-server-relative-to") //
                 .getConnection(fsKey, timeoutInMillis);
         } else {
-            return new LocalRelativeToFSConnection(connectionTypeForHost);
+            return new LocalRelativeToFSConnection(fsKey);
         }
     }
 

@@ -66,8 +66,7 @@ public class LocalFSTestInitializer extends BasicLocalTestInitializer {
     /**
      * Creates a new instance with a test root folder in the systems temporary directory.
      */
-    public LocalFSTestInitializer(final String root) {
-        super(root);
+    public LocalFSTestInitializer() {
         m_connection = new LocalFSConnection();
     }
 

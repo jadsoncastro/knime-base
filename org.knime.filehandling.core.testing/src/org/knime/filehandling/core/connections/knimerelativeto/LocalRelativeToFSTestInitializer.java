@@ -46,13 +46,10 @@
 package org.knime.filehandling.core.connections.knimerelativeto;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URL;
 import java.nio.file.Path;
 
-import org.eclipse.core.runtime.FileLocator;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
@@ -66,8 +63,6 @@ import org.knime.core.util.FileUtil;
 import org.knime.core.util.LockFailedException;
 import org.knime.filehandling.core.connections.FSConnection;
 import org.knime.filehandling.core.testing.local.BasicLocalTestInitializer;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.FrameworkUtil;
 
 /**
  * Local mountpoint or workflow relative to file system initializer.
@@ -75,38 +70,34 @@ import org.osgi.framework.FrameworkUtil;
  * @author Sascha Wolke, KNIME GmbH
  */
 public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer {
-    private static final String DUMMY_WORKFLOW = "resources/dummy-workflow";
-
     private final URI m_fileSystemUri;
 
     private WorkflowManager m_workflowManager;
 
-    private LocalRelativeToFileSystem m_fileSystem;
+    private LocalRelativeToFSConnection m_fsConnection;
 
     /**
      * Default constructor.
      * 
-     * @param rootDirectory temporary directory to use as mountpoint root
      * @param fileSystemHost hostname of knime FS (knime.mountpoint or knime.workflow)
      * @throws IOException
      */
-    public LocalRelativeToFSTestInitializer(final String rootDirectory, final String fileSystemHost) {
-        super(rootDirectory);
+    public LocalRelativeToFSTestInitializer(final String fileSystemHost) {
         m_fileSystemUri = URI.create("knime://" + fileSystemHost);
     }
 
     @Override
     public FSConnection getFSConnection() {
-        return new TestLocalRelativeToFSConnection(this);
+        return m_fsConnection;
     }
 
     @Override
     public Path getRoot() {
-        return m_fileSystem.getRootDirectories().iterator().next();
+        return getFileSystem().getRootDirectories().iterator().next();
     }
 
     protected LocalRelativeToFileSystem getFileSystem() {
-        return m_fileSystem;
+        return m_fsConnection.getFileSystem();
     }
 
     public static WorkflowManager getWorkflowManager(final File mountpointRoot, final Path currentWorkflowDirectory,
@@ -130,30 +121,21 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
         }
     }
 
-    public static Path createWorkflowDir(final Path parentDir, final String workflowName) throws IOException {
-        final File dummyWorkflow = findInPlugin(DUMMY_WORKFLOW);
+    public static Path createWorkflowDir(final Path dummyWorkflow, final Path parentDir, final String workflowName)
+        throws IOException {
         final Path workflowDir = parentDir.getFileSystem().getPath(parentDir.toString(), workflowName);
-        FileUtil.copyDir(dummyWorkflow, workflowDir.toFile());
+        FileUtil.copyDir(dummyWorkflow.toFile(), workflowDir.toFile());
         return workflowDir;
     }
 
-    private static File findInPlugin(final String name) throws IOException {
-        Bundle thisBundle = FrameworkUtil.getBundle(LocalRelativeToFSTestInitializer.class);
-        URL url = FileLocator.find(thisBundle, new org.eclipse.core.runtime.Path(name), null);
-        if (url == null) {
-            throw new FileNotFoundException(thisBundle.getLocation() + name);
-        }
-        return new File(FileLocator.toFileURL(url).getPath());
-    }
-
     @Override
-    public void beforeTestCase() throws IOException {
-        super.beforeTestCase();
+    public void beforeTestCase(Path tmpDir, Path dummyWorkflow) throws IOException {
+        super.beforeTestCase(tmpDir, dummyWorkflow);
 
-        final Path currentWorkflow = createWorkflowDir(getTempFolder(), "current-workflow");
-        m_workflowManager = getWorkflowManager(getTempFolder().toFile(), currentWorkflow, false);
+        final Path currentWorkflow = createWorkflowDir(dummyWorkflow, tmpDir, "current-workflow");
+        m_workflowManager = getWorkflowManager(tmpDir.toFile(), currentWorkflow, false);
         NodeContext.pushContext(m_workflowManager);
-        m_fileSystem = LocalRelativeToFileSystemProvider.getOrCreateFileSystem(m_fileSystemUri);
+        m_fsConnection = new LocalRelativeToFSConnection(m_fileSystemUri);
     }
 
     @Override
@@ -175,6 +157,6 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
     public RelativeToPath createFileWithContent(final String content, final String... pathComponents)
         throws IOException {
         super.createLocalFileWithContent(content, pathComponents);
-        return m_fileSystem.getPath(getFileSystem().getSeparator(), pathComponents);
+        return getFileSystem().getPath(getFileSystem().getSeparator(), pathComponents);
     }
 }
