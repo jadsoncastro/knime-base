@@ -67,7 +67,7 @@ import org.knime.filehandling.core.connections.FSPath;
 /**
  * Implementation of {@link SeekableByteChannel} for remote files systems that do not support seekable byte channels. In
  * this case the file is downloaded into a local temporary file from which a SeekableByteChannel is retrieved. Closing
- * the channel will upload the file.
+ * the channel will upload the file if file was changed or is empty.
  *
  * @author Mareike Hoeger, KNIME GmbH, Konstanz, Germany
  * @param <P> Path implementation
@@ -79,6 +79,10 @@ public abstract class TempFileSeekableByteChannel<P extends FSPath> implements S
     private final SeekableByteChannel m_tempFileSeekableByteChannel;
 
     private boolean m_isClosed = false;
+
+    private boolean m_isWritable;
+
+    private boolean m_changed = false;
 
     private final P m_file;
 
@@ -104,6 +108,8 @@ public abstract class TempFileSeekableByteChannel<P extends FSPath> implements S
                 // the file need not necessarily exist
             }
         }
+
+        m_isWritable = options.contains(StandardOpenOption.APPEND) || options.contains(StandardOpenOption.WRITE);
 
         final Set<OpenOption> opts = new HashSet<>(options);
         opts.add(StandardOpenOption.CREATE);
@@ -141,10 +147,15 @@ public abstract class TempFileSeekableByteChannel<P extends FSPath> implements S
     @Override
     public void close() throws IOException {
         if(!m_isClosed) {
-
-           copyToRemote(m_file, m_tempFile);
+            final long size = m_tempFileSeekableByteChannel.size();
 
             m_tempFileSeekableByteChannel.close();
+
+            // upload file if changed or is a new file
+            if (m_isWritable && (m_changed || size == 0)) {
+                copyToRemote(m_file, m_tempFile);
+            }
+
             Files.delete(m_tempFile);
             m_isClosed = true;
             if(m_file.getFileSystem() instanceof BaseFileSystem) {
@@ -163,10 +174,12 @@ public abstract class TempFileSeekableByteChannel<P extends FSPath> implements S
 
     @Override
     public int write(final ByteBuffer src) throws IOException {
-        if(m_isClosed) {
+        if (m_isClosed) {
             throw new ClosedChannelException();
         }
-        return m_tempFileSeekableByteChannel.write(src);
+        final int bytes = m_tempFileSeekableByteChannel.write(src);
+        m_changed = m_changed || bytes > 0;
+        return bytes;
     }
 
     @Override
@@ -195,9 +208,11 @@ public abstract class TempFileSeekableByteChannel<P extends FSPath> implements S
 
     @Override
     public SeekableByteChannel truncate(final long size) throws IOException {
-        if(m_isClosed) {
+        if (m_isClosed) {
             throw new ClosedChannelException();
         }
-        return m_tempFileSeekableByteChannel.truncate(size);
+        m_tempFileSeekableByteChannel.truncate(size);
+        m_changed = true;
+        return this;
     }
 }
