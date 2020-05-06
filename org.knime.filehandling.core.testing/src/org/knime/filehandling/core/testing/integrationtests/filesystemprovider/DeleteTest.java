@@ -1,13 +1,17 @@
 package org.knime.filehandling.core.testing.integrationtests.filesystemprovider;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Test;
 import org.knime.filehandling.core.testing.FSTestInitializer;
@@ -86,6 +90,30 @@ public class DeleteTest extends AbstractParameterizedFSTest {
 		final Path pathToNonExistingFile = m_testInitializer.makePath("does", "not", "exist");
 
 		Files.delete(pathToNonExistingFile);
+	}
+
+	@Test
+	public void test_parent_dir_cache_invalidation() throws Exception {
+		final Path fileB = m_testInitializer.createFileWithContent("test", "dir-A", "file-B");
+		final Path dirA = fileB.getParent();
+
+		// load dir-A and childs into cache
+		final List<Path> before = new ArrayList<>();
+		try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(dirA, path -> true)) {
+			directoryStream.forEach(before::add);
+		}
+		assertTrue(before.contains(fileB));
+		assertEquals(1, before.size());
+
+		// delete file-B
+		Files.delete(fileB);
+
+		// ensure dir-A child list was invalidated/refreshed
+		final List<Path> after = new ArrayList<>();
+		try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(dirA, path -> true)) {
+			directoryStream.forEach(after::add);
+		}
+		assertEquals(0, after.size());
 	}
 
 }
