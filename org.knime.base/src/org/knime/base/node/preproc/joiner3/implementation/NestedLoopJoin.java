@@ -48,8 +48,6 @@
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
-import java.util.function.Consumer;
-
 import org.knime.base.data.join.JoinedTable;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.core.data.DataRow;
@@ -70,43 +68,40 @@ import org.knime.core.node.InvalidSettingsException;
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
  *
  */
-public class NestedLoopJoin extends AbstractJoiner {
+public class NestedLoopJoin extends JoinImplementation {
 
     /**
      * @param leftTableSpec
      * @param rightTableSpec
      * @param settings
      */
-    public NestedLoopJoin(final Joiner3Settings settings, final BufferedDataTable outer,
-        final BufferedDataTable... innerTables) {
-        super(settings,outer, innerTables[0]);
+    public NestedLoopJoin(final Joiner3Settings settings, final BufferedDataTable... tables) {
+        // FIXME
+        super(settings, tables[0], tables[1]);
     }
 
     /**
      * Joins the <code>leftTable</code> and the <code>rightTable</code>.
-     *
-     * @param joiner TODO
+     * @param exec The Execution monitor for this execution.
      * @param leftTable The left input table.
      * @param rightTable The right input table.
-     * @param exec The Execution monitor for this execution.
+     * @param joiner TODO
+     *
      * @return The joined table.
      * @throws CanceledExecutionException when execution is canceled
      * @throws InvalidSettingsException when inconsistent settings are provided
      */
     @Override
-    public BufferedDataTable computeJoinTable(final BufferedDataTable leftTable, final BufferedDataTable rightTable,
-        final ExecutionContext exec, final Consumer<String> runtimeWarningHandler)
+    public BufferedDataTable twoWayJoin(final ExecutionContext exec,final BufferedDataTable rightTable,
+        final BufferedDataTable leftTable)
         throws CanceledExecutionException, InvalidSettingsException {
-
-        BufferedDataTable outerTable = rightTable;
-        BufferedDataTable innerTable = leftTable;
-
 
         // Update increment for reporting progress
         double numPairs = leftTable.size() * rightTable.size();
 
         // FIXME do the projections
-        DataTableSpec joinedTableSpec = new JoinedTable(leftTable, rightTable, JoinedTable.METHOD_APPEND_SUFFIX, "_right", true).getDataTableSpec();
+        DataTableSpec joinedTableSpec =
+            new JoinedTable(leftTable, rightTable, JoinedTable.METHOD_APPEND_SUFFIX, "_right", true).getDataTableSpec();
         BufferedDataContainer result = exec.createDataContainer(joinedTableSpec);
 
         Extractor smallerJoinAttributes = getExtractor(m_smaller);
@@ -117,28 +112,29 @@ public class NestedLoopJoin extends AbstractJoiner {
         // cache right table
         DataRow[] smallTableCached = new DataRow[m_smaller.getRowCount()];
         int i = 0;
-        for(DataRow row : m_smaller) {
+        for (DataRow row : m_smaller) {
             smallTableCached[i] = row;
             i++;
         }
 
         long after = System.currentTimeMillis();
-        System.out.println("Caching: " + (after-before));
+        System.out.println("Caching: " + (after - before));
         before = System.currentTimeMillis();
 
         int counter = 0;
 
-
         for (DataRow bigger : m_bigger) {
 
             for (int j = 0; j < smallTableCached.length; j++) {
-            DataRow smaller = smallTableCached[j];
+                DataRow smaller = smallTableCached[j];
 
-                exec.getProgressMonitor().setProgress(1. * counter/numPairs);
+                exec.getProgressMonitor().setProgress(1. * counter / numPairs);
                 exec.checkCanceled();
 
-                if(smallerJoinAttributes.apply(smaller).equals(biggerJoinAttributes.apply(bigger))) {
-                    JoinedRow outputRow = new JoinedRow(getOuter(bigger, smaller), getInner(bigger, smaller));
+                if (smallerJoinAttributes.apply(smaller).equals(biggerJoinAttributes.apply(bigger))) {
+                    DataRow outer = getOuter(bigger, smaller);
+                    DataRow inner = getInner(bigger, smaller);
+                    JoinedRow outputRow = new JoinedRow(outer, inner);
                     result.addRowToTable(outputRow);
                 }
 
@@ -148,8 +144,7 @@ public class NestedLoopJoin extends AbstractJoiner {
         }
 
         after = System.currentTimeMillis();
-        System.out.println("Joining: " + (after-before));
-
+        System.out.println("Joining: " + (after - before));
 
         result.close();
         return result.getTable();

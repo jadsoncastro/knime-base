@@ -53,7 +53,7 @@ import org.knime.core.node.BufferedDataTable;
 
 /**
  * A joiner factory provides a method to create a joiner implementation.
- * This functional interface is currently compatible to the joiner constructors, so HashJoin::new is compatible.
+ * This functional interface describes joiner constructor signatures.
  * The provided JoinAlgorithm enum can be used to configure the joiner node, e.g., to select an implementation.
  * See {@link Joiner3Settings#getJoinAlgorithm()}.
  *
@@ -87,6 +87,6 @@ public interface JoinerFactory {
     /**
      *
      */
-    public AbstractJoiner create(Joiner3Settings settings, BufferedDataTable outerTable, BufferedDataTable... innerTables);
+    public JoinImplementation create(Joiner3Settings settings, BufferedDataTable... tables);
 
 }

@@ -47,11 +47,23 @@
  */
 package org.knime.base.node.preproc.joiner3;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory;
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory.JoinAlgorithm;
+import org.knime.core.data.DataColumnSpec;
+import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.util.ConvenienceMethods;
 
 /**
  * This class hold the settings for the joiner node.
@@ -213,6 +225,186 @@ public class Joiner3Settings {
     private boolean m_enableHiLite = false;
 
     private String m_version = VERSION_3;
+
+    public void validateSettings() throws InvalidSettingsException {
+        if (getDuplicateHandling() == null) {
+            throw new InvalidSettingsException("No duplicate handling method selected");
+        }
+        if (getJoinMode() == null) {
+            throw new InvalidSettingsException("No join mode selected");
+        }
+        if ((getLeftJoinColumns() == null) || getLeftJoinColumns().length < 1 || getRightJoinColumns() == null
+            || getRightJoinColumns().length < 1) {
+            throw new InvalidSettingsException("Please define at least one joining column pair.");
+        }
+        if (getLeftJoinColumns() != null && getRightJoinColumns() != null
+            && getLeftJoinColumns().length != getRightJoinColumns().length) {
+            throw new InvalidSettingsException(
+                "Number of columns selected from the top table and from " + "the bottom table do not match");
+        }
+
+        if (getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)
+            && (getDuplicateColumnSuffix() == null || getDuplicateColumnSuffix().isEmpty())) {
+            throw new InvalidSettingsException("No suffix for duplicate columns provided");
+        }
+        if (getMaxOpenFiles() < 3) {
+            throw new InvalidSettingsException("Maximum number of open files must be at least 3.");
+        }
+
+    }
+
+    /**
+     *
+     * @param dataTableSpec input spec of the left DataTable
+     * @return the names of all columns to include from the left input table
+     * @throws InvalidSettingsException if the input spec is not compatible with the settings
+     * getJoinColumns -> getLeftJoinColumns
+     * getIncludeColumns -> getLeftIncludeCols
+     * includeAllColumns -> getLeftIncludeAll
+     * removeJoinColumns -> getRemoveLeftJoinCols
+     * @since 2.12
+     * TODO replace with multiple tables version
+     */
+    @Deprecated
+    static List<String> getIncluded(final DataTableSpec dataTableSpec, final Joiner3Settings settings,
+        final Function<Joiner3Settings, String[]> getJoinColumns,
+        final Function<Joiner3Settings, String[]> getIncludeColumns,
+        final Predicate<Joiner3Settings> includeAllColumns,
+        final Predicate<Joiner3Settings> removeJoinColumns
+        )
+        throws InvalidSettingsException {
+
+        // add all columns
+        List<String> result = dataTableSpec.stream()
+                .map(DataColumnSpec::getName)
+                .collect(Collectors.toList());
+
+        // Check if left joining columns are in table spec
+        Set<String> leftJoinCols = new HashSet<String>();
+
+
+        String[] joinColumnNames = getJoinColumns.apply(settings);
+
+        //
+        leftJoinCols.addAll(Arrays.asList(joinColumnNames));
+
+        //
+        leftJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
+
+        if (!result.containsAll(leftJoinCols)) {
+            leftJoinCols.removeAll(result);
+            throw new InvalidSettingsException(
+                "The top input table has " + "changed. Some joining columns are missing: "
+                    + ConvenienceMethods.getShortStringFrom(leftJoinCols, 3));
+        }
+
+        // if only some columns are included,
+        if (!includeAllColumns.test(settings)) {
+            List<String> leftIncludes = Arrays.asList(getIncludeColumns.apply(settings));
+            result.retainAll(leftIncludes);
+        }
+
+        if (removeJoinColumns.test(settings)) {
+            result.removeAll(Arrays.asList(joinColumnNames));
+        }
+        return result;
+    }
+
+    /**
+     * @param dataTableSpec input spec of the left DataTable
+     * @return the names of all columns to include from the left input table
+     * @throws InvalidSettingsException if the input spec is not compatible with the settings
+     * @since 2.12
+     * TODO replace with multiple tables version
+     */
+    @Deprecated
+    public List<String> getLeftIncluded(final DataTableSpec dataTableSpec)
+    throws InvalidSettingsException {
+        List<String> leftCols = new ArrayList<String>();
+        for (DataColumnSpec column : dataTableSpec) {
+            leftCols.add(column.getName());
+        }
+        // Check if left joining columns are in table spec
+        Set<String> leftJoinCols = new HashSet<String>();
+        leftJoinCols.addAll(Arrays.asList(getLeftJoinColumns()));
+        leftJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
+        if (!leftCols.containsAll(leftJoinCols)) {
+            leftJoinCols.removeAll(leftCols);
+            throw new InvalidSettingsException("The top input table has "
+               + "changed. Some joining columns are missing: "
+               + ConvenienceMethods.getShortStringFrom(leftJoinCols, 3));
+        }
+
+        if (!getLeftIncludeAll()) {
+            List<String> leftIncludes =
+                Arrays.asList(getLeftIncludeCols());
+            leftCols.retainAll(leftIncludes);
+        }
+        if (getRemoveLeftJoinCols()) {
+            leftCols.removeAll(Arrays.asList(getLeftJoinColumns()));
+        }
+        return leftCols;
+    }
+
+    /**
+     * @param dataTableSpec input spec of the right DataTable
+     * @return the names of all columns to include from the left input table
+     * @throws InvalidSettingsException if the input spec is not compatible with the settings
+     * @since 2.12
+     * TODO replace with multiple tables version
+     */
+    @Deprecated
+    public List<String> getRightIncluded(final DataTableSpec dataTableSpec)
+        throws InvalidSettingsException {
+        List<String> rightCols = new ArrayList<String>();
+        for (DataColumnSpec column : dataTableSpec) {
+            rightCols.add(column.getName());
+        }
+        // Check if right joining columns are in table spec
+        Set<String> rightJoinCols = new HashSet<String>();
+        rightJoinCols.addAll(Arrays.asList(getRightJoinColumns()));
+        rightJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
+        if (!rightCols.containsAll(rightJoinCols)) {
+            rightJoinCols.removeAll(rightCols);
+            throw new InvalidSettingsException(
+                "The bottom input table has " + "changed. Some joining columns are missing: "
+                    + ConvenienceMethods.getShortStringFrom(rightJoinCols, 3));
+        }
+
+        if (!getRightIncludeAll()) {
+            List<String> rightIncludes = Arrays.asList(getRightIncludeCols());
+            rightCols.retainAll(rightIncludes);
+        }
+        if (getRemoveRightJoinCols()) {
+            rightCols.removeAll(Arrays.asList(getRightJoinColumns()));
+        }
+        return rightCols;
+    }
+
+    /**
+     * TODO generalize to multiple tables
+     * @param tableIdx 0: first table (outer/left table in the conventional case); 1: second (first inner), third (second inner), etc
+     * @return whether to include unmatched rows from that table in the composite table (with missing values in the
+     *         columns of the other tables)
+     */
+    public boolean outputUnmatchedRows(final int tableIdx) {
+        // full outer join: retain unmatched rows from all tables
+        // left outer join: retain only unmatched rows from table 0
+        // right outer join: retain only unmatched rows from table 1
+        // inner join: return no table
+        switch (getJoinMode()) {
+            case FullOuterJoin:
+                return true;
+            case LeftOuterJoin:
+                return tableIdx == 0;
+            case RightOuterJoin:
+                return tableIdx == 1;
+            case InnerJoin:
+                return false;
+        }
+        // TODO
+        throw new IllegalStateException();
+    }
 
     /**
      * Returns true when the enhance RowID handling introduced in KNIME 2.8

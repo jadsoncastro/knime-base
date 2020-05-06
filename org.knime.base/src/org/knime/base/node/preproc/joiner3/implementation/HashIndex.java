@@ -44,25 +44,38 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Apr 27, 2020 (carlwitt): created
+ *   May 5, 2020 (carlwitt): created
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
-import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
+
+import org.knime.core.data.DataRow;
 import org.knime.core.node.BufferedDataTable;
 
 /**
  *
- * Selects a join implementation according to data distribution, size, join type, and other table specifications.
- * This implements a rudimentary cost model that estimates which join implementation is the fastest.
- * Could also take into account the available memory
- *
- * @author Carl Witt, KNIME AG, Zurich, Switzerland
- *
+ * @author carlwitt
  */
-public class CostModelFactory {
+public class HashIndex<JoinTuple> {
 
-    public static JoinImplementation create(final Joiner3Settings settings, final BufferedDataTable... tables) {
-        return new HashJoin(settings, tables);
+    Map<JoinTuple, List<DataRow>> m_index;
+
+    public HashIndex(final BufferedDataTable table, final Function<DataRow, JoinTuple> joinAttributes) {
+        m_index = StreamSupport.stream(table.spliterator(), false).collect(Collectors.groupingBy(joinAttributes));
     }
+
+
+    public List<DataRow> get(final JoinTuple query){
+        List<DataRow> result = m_index.get(query);
+
+
+        return result;
+    }
+
+
 }

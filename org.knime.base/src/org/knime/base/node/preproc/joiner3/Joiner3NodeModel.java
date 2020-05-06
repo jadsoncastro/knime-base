@@ -51,9 +51,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
 
-import org.knime.base.node.preproc.joiner3.implementation.AbstractJoiner;
+import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
 import org.knime.base.node.preproc.joiner3.implementation.Joiner;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.BufferedDataTable;
@@ -87,10 +86,18 @@ public class Joiner3NodeModel extends NodeModel {
     private HiLiteMapper m_rightMapper;
 
     /**
+     * Holds the
+     */
+    private final Joiner m_joiner;
+
+    /**
      * Creates a new model for the Joiner node.
      */
     public Joiner3NodeModel() {
         super(2, 1);
+
+        m_joiner = new Joiner();
+
         m_outHandler = new HiLiteHandler();
         m_leftTranslator = new HiLiteTranslator();
         m_rightTranslator = new HiLiteTranslator();
@@ -102,25 +109,24 @@ public class Joiner3NodeModel extends NodeModel {
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {
-        DataTableSpec[] spec = AbstractJoiner.createOutputSpec(m_settings, inSpecs, warning -> setWarningMessage(warning));
-        return spec;
+
+        return new DataTableSpec[]{Joiner.createOutputSpec(m_settings, this::setWarningMessage, inSpecs)};
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    protected BufferedDataTable[] execute(final BufferedDataTable[] inData,
-        final ExecutionContext exec) throws Exception {
-        Joiner joiner = m_settings.getJoinAlgorithm().getFactory().create(m_settings, inData[0],
-            Arrays.copyOfRange(inData, 1, inData.length));
+    protected BufferedDataTable[] execute(final BufferedDataTable[] inData, final ExecutionContext exec)
+        throws Exception {
 
+        // warning and progress messages are directly fed to the execution context
         BufferedDataTable[] joinedTable = new BufferedDataTable[]{
-                joiner.computeJoinTable(inData[0], inData[1], exec, warning -> setWarningMessage(warning))};
+            m_joiner.computeJoinTable(m_settings, exec, inData)};
 
         // TODO hiliting
-//        m_leftMapper = new DefaultHiLiteMapper(m_leftRowKeyMap);
-//        m_rightMapper = new DefaultHiLiteMapper(m_rightRowKeyMap);
+        //        m_leftMapper = new DefaultHiLiteMapper(m_leftRowKeyMap);
+        //        m_rightMapper = new DefaultHiLiteMapper(m_rightRowKeyMap);
         m_leftTranslator.setMapper(m_leftMapper);
         m_rightTranslator.setMapper(m_rightMapper);
 
@@ -235,6 +241,6 @@ public class Joiner3NodeModel extends NodeModel {
             throws InvalidSettingsException {
     	Joiner3Settings s = new Joiner3Settings();
         s.loadSettings(settings);
-        AbstractJoiner.validateSettings(s);
+        JoinImplementation.validateSettings(s);
     }
 }

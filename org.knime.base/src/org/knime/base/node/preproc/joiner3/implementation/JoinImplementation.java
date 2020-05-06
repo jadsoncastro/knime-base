@@ -51,13 +51,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
@@ -67,73 +66,46 @@ import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataRow;
+import org.knime.core.data.DataTable;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.DataType;
-import org.knime.core.data.DoubleValue;
+import org.knime.core.data.RowIterator;
 import org.knime.core.data.RowKey;
-import org.knime.core.data.container.CloseableRowIterator;
 import org.knime.core.data.def.DefaultCellIterator;
-import org.knime.core.data.def.DoubleCell;
-import org.knime.core.data.def.IntCell;
 import org.knime.core.data.def.StringCell;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeLogger;
-import org.knime.core.node.util.ConvenienceMethods;
 import org.knime.core.util.UniqueNameGenerator;
 
 /**
- * The joiner implements a database like join of two tables.
+ * A join implementation executes the join by iterating over the provided tables and generating output rows from
+ * matching input rows. Implementations differ in their speed/memory-usage tradeoff and also in the type of join
+ * predicates they support, e.g., {@link HashJoin} supports only equijoins.
  *
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
  *
  */
-public abstract class AbstractJoiner implements Joiner {
+public abstract class JoinImplementation {
     /** Logger to print debug info to. */
-    static final NodeLogger LOGGER = NodeLogger.getLogger(AbstractJoiner.class);
+    static final NodeLogger LOGGER = NodeLogger.getLogger(JoinImplementation.class);
 
     /**
-     * Defines a mapping from a row in a table to the representation of the values of their join columns.
+     * This can change and the auxiliary data structures should be updated accordingly.
      */
-    protected interface Extractor extends Function<DataRow, JoinTuple> {
-    }
+    protected Joiner3Settings m_settings;
+
+    /**
+     * Defines a mapping from a row in a table to a representation of the values of its join columns.
+     * Useful for an equijoin where the extracted representation has to be tested with equals()
+     */
+    protected interface Extractor extends Function<DataRow, JoinTuple> {}
 
     /**
      *
-     * @param table
-     * @return
      */
-    protected Extractor getExtractor(final BufferedDataTable table) {
-
-        final int[] indices = getJoinColumnIndices(table);
-        return row -> {
-
-                final DataCell[] cells = new DataCell[indices.length];
-                // using a stream here would be more readable, but has severe performance costs
-                for (int i = 0; i < indices.length; i++) {
-                    if (indices[i] >= 0) {
-                        cells[i] = row.getCell(indices[i]);
-                    } else {
-                        // It is allowed to use the row ids to join tables.
-                        // However, row keys are not stored in a column of a table, so the convention
-                        // is used
-                        cells[i] = new StringCell(row.getKey().getString());
-                    }
-                }
-                return new JoinTuple(cells);
-            };
-    }
-
-
-    private final DataTableSpec m_leftDataTableSpec;
-
-    private final DataTableSpec m_rightDataTableSpec;
-
-    private final DataTableSpec[] m_dataTableSpecs;
-
-    private final HashMap<BufferedDataTable, String[]> m_joinColumns;
+    protected final HashMap<DataTable, String[]> m_joinColumns;
 
     /**
      * If true, {@link #m_bigger} references the outer table and {@link #m_smaller} references the inner table. If
@@ -143,15 +115,15 @@ public abstract class AbstractJoiner implements Joiner {
 
     /**
      * References the table (inner or outer) with fewer rows.
+     * This value is empty if tables do not provide row counts to sort them by size.
      */
     final BufferedDataTable m_smaller;
 
     /**
      * References the table (either inner table or outer table) with more rows.
+     * This value is empty if tables do not provide row counts to sort them by size.
      */
     final BufferedDataTable m_bigger;
-
-    final Joiner3Settings m_settings;
 
     /** True for Left Outer Join and Full Outer Join. */
     boolean m_retainLeft;
@@ -179,153 +151,57 @@ public abstract class AbstractJoiner implements Joiner {
 
     HashMap<RowKey, Set<RowKey>> m_rightRowKeyMap;
 
-    /**
-     * The names of the columns
-     */
-    List<String> m_leftSurvivors;
-
-    List<String> m_rightSurvivors;
-
-    private final List<String> m_configWarnings;
-
     final List<String> m_runtimeWarnings;
 
     /** Only used for testcases, simulates an out-of-memory event after that many rows added in memory. */
     int m_rowsAddedBeforeForcedOOM;
 
     /**
+     * The tables to be joined, in their logical order, e.g,. if the join is Employee ⨝ Department ⨝ City
+     * the tables will be stored as Employee, Department, City in this list.
+     */
+    protected final List<BufferedDataTable> m_tables;
+
+    /**
+     * Contains the column indices that will make it into the output table for a given input table.
+     * E.g., Employee = (LastName, DepartmentID, Age) and the output shall contain Age and LastName.
+     * Then the result would be int[]{2, 0}
      *
      */
-    protected AbstractJoiner(final Joiner3Settings settings, final BufferedDataTable outer,
-        final BufferedDataTable inner) {
+    protected final Map<BufferedDataTable, int[]> m_projectionColumns = new HashMap();
 
-        BufferedDataTable[] ordered = new BufferedDataTable[]{outer, inner};
-        m_outerIsBigger = outer.size() >= inner.size();
-        final int biggerIndex = m_outerIsBigger ? 0 : 1;
-        final int smallerIndex = 1 - biggerIndex;
-        m_bigger = ordered[biggerIndex];
-        m_smaller = ordered[smallerIndex];
 
-        m_leftDataTableSpec = outer.getDataTableSpec();
-        //FIXME more than one inner table
-        m_rightDataTableSpec = inner.getDataTableSpec();
+    /**
+     *
+     */
+    protected JoinImplementation(final Joiner3Settings settings, final BufferedDataTable... tables) {
+
         m_settings = settings;
-        m_dataTableSpecs = new DataTableSpec[]{outer.getDataTableSpec(), inner.getDataTableSpec()};
+
+        m_tables = Arrays.asList(tables);
+
+
+        //FIXME
+        BufferedDataTable outer = tables[0];
+        BufferedDataTable inner = tables[1];
+
+        // if all tables have row counts, sort them by row count descending
+        m_tables.sort(Comparator.comparingLong(BufferedDataTable::size).reversed());
+        m_bigger = m_tables.get(0);
+        m_smaller = m_tables.get(1);
+        m_outerIsBigger = m_bigger == outer;
+
+        // first table is the biggest
 
         // Map.of is Java 9
         m_joinColumns = new HashMap<>();
         m_joinColumns.put(outer, settings.getLeftJoinColumns());
         m_joinColumns.put(inner, settings.getRightJoinColumns());
 
-        m_leftRowKeyMap = new HashMap<RowKey, Set<RowKey>>();
-        m_rightRowKeyMap = new HashMap<RowKey, Set<RowKey>>();
-
-        m_configWarnings = new ArrayList<String>();
         m_runtimeWarnings = new ArrayList<String>();
 
     }
 
-    /**
-     * Creates a spec for the output table by taking care of duplicate columns.
-     *
-     * @param specs the specs of the two input tables
-     * @return the spec of the output table
-     * @throws InvalidSettingsException when settings are not supported
-     */
-    DataTableSpec createSpec(final DataTableSpec[] specs) throws InvalidSettingsException {
-        return createSpec(specs, m_settings, IGNORE_WARNINGS);
-    }
-
-    /**
-     * Creates a spec for the output table by taking care of duplicate columns.
-     *
-     * @param specs the specs of the two input tables
-     * @param settings TODO
-     * @return the spec of the output table
-     * @throws InvalidSettingsException when settings are not supported
-     */
-    static DataTableSpec createSpec(final DataTableSpec[] specs, final Joiner3Settings settings,
-        final Consumer<String> configurationWarningHandler) throws InvalidSettingsException {
-        validateSettings(settings);
-
-        List<String> leftCols = getLeftIncluded(specs[0], settings);
-        List<String> rightCols = getRightIncluded(specs[1], settings);
-
-        List<String> duplicates = new ArrayList<String>();
-        duplicates.addAll(leftCols);
-        duplicates.retainAll(rightCols);
-
-        if (settings.getDuplicateHandling().equals(DuplicateHandling.DontExecute) && !duplicates.isEmpty()) {
-            throw new InvalidSettingsException(
-                "Found duplicate columns, won't execute. Fix it in " + "\"Column Selection\" tab");
-        }
-
-        if (settings.getDuplicateHandling().equals(DuplicateHandling.Filter)) {
-
-            for (String duplicate : duplicates) {
-                DataType leftType = specs[0].getColumnSpec(duplicate).getType();
-                DataType rightType = specs[1].getColumnSpec(duplicate).getType();
-                if (!leftType.equals(rightType)) {
-                    configurationWarningHandler.accept("The column \"" + duplicate + "\" can be found in "
-                        + "both input tables but with different data type. "
-                        + "Only the one in the top input table will show "
-                        + "up in the output table. Please change the " + "Duplicate Column Handling if both columns "
-                        + "should show up in the output table.");
-                }
-            }
-
-            rightCols.removeAll(leftCols);
-        }
-
-        if ((!duplicates.isEmpty()) && settings.getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)
-            && (settings.getDuplicateColumnSuffix() == null || settings.getDuplicateColumnSuffix().equals(""))) {
-            throw new InvalidSettingsException("No suffix for duplicate columns provided.");
-        }
-
-        // check if data types of joining columns do match
-        for (int i = 0; i < settings.getLeftJoinColumns().length; i++) {
-            String leftJoinAttr = settings.getLeftJoinColumns()[i];
-            boolean leftJoinAttrIsRowKey = Joiner3Settings.ROW_KEY_IDENTIFIER.equals(leftJoinAttr);
-            DataType leftType = leftJoinAttrIsRowKey ? StringCell.TYPE : specs[0].getColumnSpec(leftJoinAttr).getType();
-            String rightJoinAttr = settings.getRightJoinColumns()[i];
-            boolean rightJoinAttrIsRowKey = Joiner3Settings.ROW_KEY_IDENTIFIER.equals(rightJoinAttr);
-            DataType rightType =
-                rightJoinAttrIsRowKey ? StringCell.TYPE : specs[1].getColumnSpec(rightJoinAttr).getType();
-            if (!leftType.equals(rightType)) {
-                String left = leftJoinAttrIsRowKey ? "Row ID" : leftJoinAttr;
-                String right = rightJoinAttrIsRowKey ? "Row ID" : rightJoinAttr;
-                // check different cases here to give meaningful error messages
-                if (leftType.equals(DoubleCell.TYPE) && rightType.equals(IntCell.TYPE)) {
-                    throw new InvalidSettingsException(
-                        "Type mismatch found of " + "Joining Column Pair \"" + left + "\" and \"" + right + "\"."
-                            + " Use \"Double to Int node\" to " + "convert the type of \"" + left + "\" to integer.");
-                } else if (leftType.equals(IntCell.TYPE) && rightType.equals(DoubleCell.TYPE)) {
-                    throw new InvalidSettingsException(
-                        "Type mismatch found of " + "Joining Column Pair \"" + left + "\" and \"" + right + "\"."
-                            + " se \"Double to Int node\" to " + "convert the type of \"" + right + "\" to integer.");
-                } else if (leftType.isCompatible(DoubleValue.class) && rightType.equals(StringCell.TYPE)) {
-                    throw new InvalidSettingsException(
-                        "Type mismatch found of " + "Joining Column Pair \"" + left + "\" and \"" + right + "\"."
-                            + " Use \"Number to String node\" to " + "convert the type of \"" + left + "\" to string.");
-                } else if (leftType.equals(StringCell.TYPE) && rightType.isCompatible(DoubleValue.class)) {
-                    throw new InvalidSettingsException("Type mismatch found of " + "Joining Column Pair \"" + left
-                        + "\" and \"" + right + "\"." + " Use \"Number to String node\" to " + "convert the type of \""
-                        + right + "\" to string.");
-                } else if (leftType.getPreferredValueClass() != rightType.getPreferredValueClass()) {
-                    // if both don't have the same preferred class they can't be equals, see DataCell#equals
-
-                    throw new InvalidSettingsException("Type mismatch found of " + "Joining Column Pair \"" + left
-                        + "\" and \"" + right + "\"." + "This causes an empty output table.");
-                }
-            }
-        }
-
-        List<DataColumnSpec> outColSpecs = new ArrayList<DataColumnSpec>();
-
-        survivors(specs, settings, leftCols, rightCols, outColSpecs);
-
-        return new DataTableSpec(outColSpecs.toArray(new DataColumnSpec[outColSpecs.size()]));
-    }
 
     /**
      * @param specs
@@ -390,84 +266,17 @@ public abstract class AbstractJoiner implements Joiner {
         return result;
     }
 
-    /**
-     * @param dataTableSpec input spec of the left DataTable
-     * @return the names of all columns to include from the left input table
-     * @throws InvalidSettingsException if the input spec is not compatible with the settings
-     * @since 2.12
-     */
-    static List<String> getLeftIncluded(final DataTableSpec dataTableSpec, final Joiner3Settings settings)
-        throws InvalidSettingsException {
-        List<String> leftCols = new ArrayList<String>();
-        for (DataColumnSpec column : dataTableSpec) {
-            leftCols.add(column.getName());
-        }
-        // Check if left joining columns are in table spec
-        Set<String> leftJoinCols = new HashSet<String>();
-        leftJoinCols.addAll(Arrays.asList(settings.getLeftJoinColumns()));
-        leftJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
-        if (!leftCols.containsAll(leftJoinCols)) {
-            leftJoinCols.removeAll(leftCols);
-            throw new InvalidSettingsException(
-                "The top input table has " + "changed. Some joining columns are missing: "
-                    + ConvenienceMethods.getShortStringFrom(leftJoinCols, 3));
-        }
 
-        if (!settings.getLeftIncludeAll()) {
-            List<String> leftIncludes = Arrays.asList(settings.getLeftIncludeCols());
-            leftCols.retainAll(leftIncludes);
-        }
-        if (settings.getRemoveLeftJoinCols()) {
-            leftCols.removeAll(Arrays.asList(settings.getLeftJoinColumns()));
-        }
-        return leftCols;
-    }
 
-    /**
-     * @param dataTableSpec input spec of the right DataTable
-     * @return the names of all columns to include from the left input table
-     * @throws InvalidSettingsException if the input spec is not compatible with the settings
-     * @since 2.12
-     */
-    static List<String> getRightIncluded(final DataTableSpec dataTableSpec, final Joiner3Settings settings)
-        throws InvalidSettingsException {
-        List<String> rightCols = new ArrayList<String>();
-        for (DataColumnSpec column : dataTableSpec) {
-            rightCols.add(column.getName());
-        }
-        // Check if right joining columns are in table spec
-        Set<String> rightJoinCols = new HashSet<String>();
-        rightJoinCols.addAll(Arrays.asList(settings.getRightJoinColumns()));
-        rightJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
-        if (!rightCols.containsAll(rightJoinCols)) {
-            rightJoinCols.removeAll(rightCols);
-            throw new InvalidSettingsException(
-                "The bottom input table has " + "changed. Some joining columns are missing: "
-                    + ConvenienceMethods.getShortStringFrom(rightJoinCols, 3));
-        }
+//    public DataTableSpec getOutputSpec(final DataTableSpec[] dataTableSpecs, final Joiner3Settings settings,
+//        final Consumer<String> configurationWarningHandler) throws InvalidSettingsException {
+//
+//        return createSpec(dataTableSpecs, settings, configurationWarningHandler);
+//    }
 
-        if (!settings.getRightIncludeAll()) {
-            List<String> rightIncludes = Arrays.asList(settings.getRightIncludeCols());
-            rightCols.retainAll(rightIncludes);
-        }
-        if (settings.getRemoveRightJoinCols()) {
-            rightCols.removeAll(Arrays.asList(settings.getRightJoinColumns()));
-        }
-        return rightCols;
-    }
 
-    public DataTableSpec getOutputSpec(final DataTableSpec[] dataTableSpecs, final Joiner3Settings settings,
-        final Consumer<String> configurationWarningHandler) throws InvalidSettingsException {
-
-        return createSpec(dataTableSpecs, settings, configurationWarningHandler);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public abstract BufferedDataTable computeJoinTable(final BufferedDataTable leftTable,
-        final BufferedDataTable rightTable, final ExecutionContext exec, Consumer<String> runtimeWarningHandler)
+    public abstract BufferedDataTable twoWayJoin(final ExecutionContext exec, final BufferedDataTable leftTable,
+        final BufferedDataTable rightTable)
         throws CanceledExecutionException, InvalidSettingsException;
 
     /**
@@ -492,12 +301,12 @@ public abstract class AbstractJoiner implements Joiner {
      * @param inputTableIndex
      * @return
      */
-    protected int[] getJoinColumnIndices(final BufferedDataTable table) {
+    protected int[] getJoinColumnIndices(final DataTable table) {
         return Arrays.stream(m_joinColumns.get(table)).mapToInt(table.getDataTableSpec()::findColumnIndex).toArray();
     }
 
     @Deprecated
-    protected List<Integer> getLeftJoinIndices(final BufferedDataTable leftTable) {
+    protected List<Integer> getLeftJoinIndices(final DataTable leftTable) {
         // Create list of indices for the joining columns (Element of the list
         // is -1 if RowKey should be joined).
         int numJoinAttributes = m_settings.getLeftJoinColumns().length;
@@ -510,7 +319,7 @@ public abstract class AbstractJoiner implements Joiner {
     }
 
     @Deprecated
-    protected List<Integer> getRightJoinIndices(final BufferedDataTable rightTable) {
+    protected List<Integer> getRightJoinIndices(final DataTable rightTable) {
         // Create list of indices for the joining columns (Element of the list
         // is -1 if RowKey should be joined).
         int numJoinAttributes = m_settings.getLeftJoinColumns().length;
@@ -522,7 +331,7 @@ public abstract class AbstractJoiner implements Joiner {
         return rightTableJoinIndices;
     }
 
-    JoinedRowKeyFactory createRowKeyFactory(final BufferedDataTable leftTable, final BufferedDataTable rightTable) {
+    JoinedRowKeyFactory createRowKeyFactory(final DataTable leftTable, final DataTable rightTable) {
 
         if (useSingleRowKeyFactory(leftTable, rightTable)) {
             // This is the special case of row key match row key
@@ -535,7 +344,7 @@ public abstract class AbstractJoiner implements Joiner {
     /**
      * Gives true when the SingleRowKeyFactory should be used.
      */
-    private boolean useSingleRowKeyFactory(final BufferedDataTable leftTable, final BufferedDataTable rightTable) {
+    private boolean useSingleRowKeyFactory(final DataTable leftTable, final DataTable rightTable) {
         List<Integer> leftTableJoinIndices = getLeftJoinIndices(leftTable);
         List<Integer> rightTableJoinIndices = getRightJoinIndices(rightTable);
 
@@ -549,8 +358,8 @@ public abstract class AbstractJoiner implements Joiner {
             && m_settings.useEnhancedRowIdHandling());
     }
 
-    InputRow.Settings createInputDataRowSettings(final BufferedDataTable leftTable,
-        final BufferedDataTable rightTable) {
+    InputRow.Settings createInputDataRowSettings(final DataTable leftTable,
+        final DataTable rightTable) {
         List<Integer> leftTableJoinIndices = getLeftJoinIndices(leftTable);
         List<Integer> rightTableJoinIndices = getRightJoinIndices(rightTable);
 
@@ -604,7 +413,7 @@ public abstract class AbstractJoiner implements Joiner {
      * @param rightTable The right input table
      * @param duplicates The list of columns to test for identity
      */
-    void compareDuplicates(final BufferedDataTable leftTable, final BufferedDataTable rightTable,
+    void compareDuplicates(final DataTable leftTable, final DataTable rightTable,
         final List<String> duplicates) {
 
         int[] leftIndex = getIndicesOf(leftTable, duplicates);
@@ -612,8 +421,8 @@ public abstract class AbstractJoiner implements Joiner {
 
         String[] messages = new String[duplicates.size()];
 
-        CloseableRowIterator leftIter = leftTable.iterator();
-        CloseableRowIterator rightIter = rightTable.iterator();
+        RowIterator leftIter = leftTable.iterator();
+        RowIterator rightIter = rightTable.iterator();
         while (leftIter.hasNext()) {
             if (!rightIter.hasNext()) {
                 // right table has less rows
@@ -658,13 +467,13 @@ public abstract class AbstractJoiner implements Joiner {
      * @param cols Columns of the table
      * @return the indices of the given columns in the table.
      */
-    static int[] getIndicesOf(final BufferedDataTable table, final List<String> cols) {
+    static int[] getIndicesOf(final DataTable table, final List<String> cols) {
         int[] indices = new int[cols.size()];
         int c = 0;
 
         for (String col : cols) {
             for (int i = 0; i < table.getDataTableSpec().getNumColumns(); i++) {
-                if (table.getSpec().getColumnSpec(i).getName().equals(col)) {
+                if (table.getDataTableSpec().getColumnSpec(i).getName().equals(col)) {
                     indices[c] = i;
                 }
             }
@@ -673,19 +482,6 @@ public abstract class AbstractJoiner implements Joiner {
         return indices;
     }
 
-    /**
-     * @return the rowKeyMap
-     */
-    public HashMap<RowKey, Set<RowKey>> getLeftRowKeyMap() {
-        return m_leftRowKeyMap;
-    }
-
-    /**
-     * @return the rowKeyMap
-     */
-    public HashMap<RowKey, Set<RowKey>> getRightRowKeyMap() {
-        return m_rightRowKeyMap;
-    }
 
     /**
      * Used for testing, only. Simulates an out-of-memory event after that many rows have been added to memory.
@@ -694,18 +490,6 @@ public abstract class AbstractJoiner implements Joiner {
      */
     void setRowsAddedBeforeOOM(final int maxRows) {
         m_rowsAddedBeforeForcedOOM = maxRows;
-    }
-
-    /**
-     * @param settings
-     * @param inSpecs
-     * @param warningMessageHandler a consumer that accepts warnings created during configuration.
-     * @return
-     */
-    public static DataTableSpec[] createOutputSpec(final Joiner3Settings settings, final DataTableSpec[] inSpecs,
-        final Consumer<String> warningMessageHandler) {
-
-        return null;
     }
 
     /**
@@ -745,6 +529,33 @@ public abstract class AbstractJoiner implements Joiner {
         stringBuilder.append(inner.getKey().getString());
         return new RowKey(stringBuilder.toString());
     }
+
+    /**
+     *
+     * @param table
+     * @return
+     */
+    protected Extractor getExtractor(final DataTable table) {
+
+        final int[] indices = getJoinColumnIndices(table);
+        return row -> {
+
+            final DataCell[] cells = new DataCell[indices.length];
+            // using a stream here would be more readable, but has severe performance costs
+            for (int i = 0; i < indices.length; i++) {
+                if (indices[i] >= 0) {
+                    cells[i] = row.getCell(indices[i]);
+                } else {
+                    // It is allowed to use the row ids to join tables.
+                    // However, row keys are not stored in a column of a table, so the convention
+                    // is used
+                    cells[i] = new StringCell(row.getKey().getString());
+                }
+            }
+            return new JoinTuple(cells);
+        };
+    }
+
 
     class JoinedRow implements DataRow {
         /** Underlying left row. */
