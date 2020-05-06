@@ -56,10 +56,8 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
-import org.knime.filehandling.core.connections.base.BaseFileStore;
-import org.knime.filehandling.core.connections.base.BaseFileSystem;
+import org.knime.core.node.workflow.WorkflowContext;
 import org.knime.filehandling.core.defaultnodesettings.FileSystemChoice.Choice;
 import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection.Type;
 
@@ -68,75 +66,61 @@ import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection.Type;
  *
  * @author Sascha Wolke, KNIME GmbH
  */
-public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPath> {
+public class LocalRelativeToFileSystem extends BaseRelativeToFileSystem {
 
-    /**
-     * Separator for name components of paths.
-     */
-    public static final String PATH_SEPARATOR = "/";
-
-    private static final long CACHE_TTL = 0; // = disabled
-
-    private static final String MOUNTPOINT_REL_FILE_STORE_TYPE = "knime-relative-mountpoint";
-
-    private static final String WORKFLOW_REL_FILE_STORE_TYPE = "knime-relative-workflow";
-
-    private final String m_scheme;
-
-    private final String m_hostString;
-
-    private final LocalRelativeToPathConfig m_pathConfig;
+    private final FileStore m_localFileStore;
 
     private final List<FileStore> m_fileStores;
+
+    /**
+     * A local path (from the default FS provider) that points to the
+     * folder of the current mountpoint.
+     */
+    private final Path m_localMountpointDirectory;
+
+    /**
+     * A local path (from the default FS provider) that points to the folder
+     * of the current workflow.
+     */
+    private final Path m_localWorkflowDirectory;
+
+    /**
+     * A path (from the relative-to FS provider) that specifies the current workflow
+     * directory.
+     */
+    protected final RelativeToPath m_workflowDirectory;
 
     /**
      * Default constructor.
      *
      * @param fileSystemProvider Creator of this FS, holding a reference.
      * @param uri URI without a path
-     * @param pathConfig Provides underlying configuration, e.g. where this fs is rooted in the local file system.
+     * @param connectionType {@link Type#MOUNTPOINT_RELATIVE} or {@link Type#WORKFLOW_RELATIVE} connection type
      * @param isConnectedFs Whether this file system is a {@link Choice#CONNECTED_FS} or a convenience file system
      *            ({@link Choice#KNIME_FS})
      * @throws IOException
      */
-    protected LocalRelativeToFileSystem(final LocalRelativeToFileSystemProvider fileSystemProvider,
-        final URI uri,
-        final LocalRelativeToPathConfig pathConfig,
-        final boolean isConnectedFs) throws IOException {
+    protected LocalRelativeToFileSystem(final LocalRelativeToFileSystemProvider fileSystemProvider, final URI uri,
+        final Type connectionType, final boolean isConnectedFs) throws IOException {
 
-        super(fileSystemProvider, //
-            uri, //
-            CACHE_TTL, //
-            isConnectedFs ? Choice.CONNECTED_FS : Choice.KNIME_FS,//
-            Optional.of(pathConfig.getType() == Type.MOUNTPOINT_RELATIVE ? "mountpoint" : "workflow"));
+        super(fileSystemProvider, uri, connectionType, isConnectedFs);
 
-        m_scheme = uri.getScheme();
-        m_hostString = uri.getHost();
-        m_pathConfig = pathConfig;
+        final WorkflowContext workflowContext = getWorkflowContext();
+        if (isServerContext(workflowContext)) {
+            throw new UnsupportedOperationException(
+                "Unsupported temporary copy of workflow detected. Relative to does not support server execution.");
+        }
 
-        final FileStore localFileStore = Files.getFileStore(pathConfig.getLocalMountpointFolder());
-        final String fsType =
-                pathConfig.getType() == Type.MOUNTPOINT_RELATIVE ? MOUNTPOINT_REL_FILE_STORE_TYPE : WORKFLOW_REL_FILE_STORE_TYPE;
-        m_fileStores = Collections.unmodifiableList(Collections.singletonList(
-                new BaseFileStore(fsType, "default_file_store", localFileStore.isReadOnly(),
-                    localFileStore.getTotalSpace(), localFileStore.getUsableSpace())));
-
+        m_localMountpointDirectory = workflowContext.getMountpointRoot().toPath().toAbsolutePath().normalize();
+        m_localWorkflowDirectory = workflowContext.getCurrentLocation().toPath().toAbsolutePath().normalize();
+        m_workflowDirectory = localToRelativeToPath(m_localWorkflowDirectory);
+        m_localFileStore = getFileStore(m_localWorkflowDirectory, getFileStoreType(), "default_file_store");
+        m_fileStores = Collections.unmodifiableList(Collections.singletonList(m_localFileStore));
     }
 
     @Override
-    public String getSeparator() {
-        return PATH_SEPARATOR;
-    }
-
-    @Override
-    public Iterable<Path> getRootDirectories() {
-        return Collections.singletonList(getPath(getSeparator()));
-    }
-
-
-    @Override
-    public LocalRelativeToPath getPath(final String first, final String... more) {
-        return new LocalRelativeToPath(this, first, more);
+    protected RelativeToPath getWorkflowDirectory() {
+        return m_workflowDirectory;
     }
 
     @Override
@@ -144,12 +128,34 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
         return m_fileStores;
     }
 
+    @Override
+    protected FileStore getFileStore(final RelativeToPath path) throws IOException {
+        return m_localFileStore;
+    }
+
+    @Override
+    public boolean isWorkflowDirectory(final RelativeToPath path) throws IOException {
+        return isLocalWorkflowDirectory(toAbsoluteLocalPath(path));
+    }
+
+    @Override
+    protected Path toRealPathWithAccessibilityCheck(final RelativeToPath path) throws IOException {
+        if (!isPathAccessible(path)) {
+            throw new NoSuchFileException(path.toString());
+        } else {
+            return toAbsoluteLocalPath(path);
+        }
+    }
+
     /**
-     * @return file store of local file system holding the mount point
-     * @throws IOException
+     * Maps a path from relative-to file system to a path in the local file system.
+     *
+     * @param path a relative-to path inside relative-to file system
+     * @return an absolute path in the local file system (default FS provider) that corresponds to this path.
      */
-    protected FileStore getDefaultFileStore() throws IOException {
-        return m_fileStores.get(0);
+    private Path toAbsoluteLocalPath(final RelativeToPath path) {
+        final RelativeToPath absolutePath = (RelativeToPath) path.toAbsolutePath().normalize();
+        return absolutePath.appendToBaseDir(m_localMountpointDirectory);
     }
 
     /**
@@ -160,46 +166,25 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
      * @return {@code true} if path is a normal file or a workflow directory
      * @throws IOException
      */
-    protected boolean isRegularFile(final LocalRelativeToPath path) throws IOException {
-        final Path localPath = toAbsoluteLocalPath(path);
-
-        if (!Files.isDirectory(localPath)) {
-            return true; // normal file
-        } else if (m_pathConfig.isWorkflowRelativeFileSystem()
-            && (m_pathConfig.isCurrentWorkflowFolder(localPath) || m_pathConfig.isInCurrentWorkflowFolder(localPath))) {
-            return false; // workflow folder, or a folder within current workflow folder
+    @Override
+    protected boolean isRegularFile(final RelativeToPath path) throws IOException {
+        if (!isPathAccessible(path)) {
+            throw new NoSuchFileException(path.toString()); // not allowed
+        } else if (isMountpointRelativeFileSystem() && isCurrentWorkflowDirectory(path)) {
+            return true;
+        } else if (isMountpointRelativeFileSystem() && isOrInCurrentWorkflowDirectory(path)) {
+            throw new NoSuchFileException(path.toString()); // not allowed
+        } else if (!isOrInCurrentWorkflowDirectory(path) && isWorkflowDirectory(path)) {
+            return true;
         } else {
-            return isWorkflow(path); // workflow or normal directory
+            return !Files.isDirectory(toAbsoluteLocalPath(path));
         }
     }
 
-    /**
-     * Check if the given relative-to path exists and is accessible.
-     *
-     * @param path relative-to path to check
-     * @return {@code true} if path exists and is accessible
-     */
-    protected boolean existsWithAccessibilityCheck(final LocalRelativeToPath path) {
+    @Override
+    protected boolean existsWithAccessibilityCheck(final RelativeToPath path) throws IOException {
         final Path localPath = toAbsoluteLocalPath(path);
-        return m_pathConfig.isLocalPathAccessible(localPath) && Files.exists(localPath);
-    }
-
-    /**
-     * @param path path to check
-     * @return {@code true} if the path represents a workflow directory.
-     */
-    public boolean isWorkflow(final LocalRelativeToPath path) {
-        return LocalRelativeToPathConfig.isLocalWorkflowFolder(toAbsoluteLocalPath(path));
-    }
-
-    @Override
-    public String getSchemeString() {
-        return m_scheme;
-    }
-
-    @Override
-    public String getHostString() {
-        return m_hostString;
+        return isPathAccessible(path) && Files.exists(localPath);
     }
 
     @Override
@@ -208,47 +193,21 @@ public class LocalRelativeToFileSystem extends BaseFileSystem<LocalRelativeToPat
     }
 
     /**
-     * @return the underlying configuration, e.g. where this fs is rooted in the local file system.
-     */
-    protected LocalRelativeToPathConfig getPathConfig() {
-        return m_pathConfig;
-    }
-
-    /**
-     * Validates that a given relative-to file system path is accessible and maps it to a path in the local file system.
+     * Convert a given local file system path into a virtual absolute relative to path.
      *
-     * @param path a relative-to path inside relative-to file system
-     * @return an absolute path in the local file system (default FS provider) that corresponds to this path.
-     * @throws NoSuchFileException if given path is not accessible
-     */
-    protected Path toLocalPathWithAccessibilityCheck(final LocalRelativeToPath path) throws NoSuchFileException {
-        final Path localPath = toAbsoluteLocalPath(path);
-
-        if (!m_pathConfig.isLocalPathAccessible(localPath)) {
-            throw new NoSuchFileException(path.toString());
-        }
-
-        return localPath;
-    }
-
-    /**
-     * Maps a path from relative-to file system to a path in the local file system.
-     *
-     * @param path a relative-to path inside relative-to file system
-     * @return an absolute path in the local file system (default FS provider) that corresponds to this path.
-     */
-    private Path toAbsoluteLocalPath(final LocalRelativeToPath path) {
-        final LocalRelativeToPath absolutePath = path.toAbsolutePath();
-        return absolutePath.appendToBaseDir(m_pathConfig.getLocalMountpointFolder());
-    }
-
-    /**
-     * Convert a given local file system path into a absolute relative-to path.
+     * Note: The local file system might use other separators than the relative-to file system.
      *
      * @param localPath path in local file system
-     * @return absolute path in relative to file system
+     * @return absolute path in virtual relative to file system
      */
-    public LocalRelativeToPath toAbsoluteLocalRelativeToPath(final Path localPath) {
-        return getPath(m_pathConfig.toAbsoluteLocalRelativeToPath(localPath));
+    protected RelativeToPath localToRelativeToPath(final Path localPath) {
+        final Path relativePath = m_localMountpointDirectory.relativize(localPath);
+
+        final String[] parts = new String[relativePath.getNameCount()];
+        for (int i = 0; i < parts.length; i++) {
+            parts[i] = relativePath.getName(i).toString();
+        }
+
+        return getPath(getSeparator(), parts);
     }
 }

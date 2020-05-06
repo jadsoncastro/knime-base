@@ -58,7 +58,8 @@ import javax.swing.ImageIcon;
 
 import org.eclipse.core.runtime.FileLocator;
 import org.knime.core.node.NodeLogger;
-import org.knime.filehandling.core.connections.knimerelativeto.LocalRelativeToPath;
+import org.knime.filehandling.core.connections.knimerelativeto.BaseRelativeToFileSystem;
+import org.knime.filehandling.core.connections.knimerelativeto.RelativeToPath;
 import org.knime.filehandling.core.connections.knimeremote.KNIMERemotePath;
 import org.knime.filehandling.core.filechooser.NioFileView;
 import org.osgi.framework.FrameworkUtil;
@@ -81,9 +82,10 @@ public class WorkflowAwareFileView extends NioFileView {
             final Icon workflowIcon = getWorkflowIcon();
             final Path path = f.toPath();
 
-            if (workflowIcon != null && path instanceof LocalRelativeToPath) {
-                final LocalRelativeToPath relativePath = (LocalRelativeToPath)path;
-                if (relativePath.getFileSystem().isWorkflow(relativePath)) {
+            if (workflowIcon != null && path instanceof RelativeToPath) {
+                final RelativeToPath relativePath = (RelativeToPath)path;
+                final BaseRelativeToFileSystem fs = (BaseRelativeToFileSystem)relativePath.getFileSystem();
+                if (fs.isWorkflowDirectory(relativePath)) {
                     return workflowIcon;
                 }
 

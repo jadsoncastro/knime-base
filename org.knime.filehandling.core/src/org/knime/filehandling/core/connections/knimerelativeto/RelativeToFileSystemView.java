@@ -48,77 +48,21 @@
  */
 package org.knime.filehandling.core.connections.knimerelativeto;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-
-import org.apache.commons.httpclient.URIException;
-import org.apache.commons.httpclient.util.URIUtil;
-import org.knime.filehandling.core.connections.base.UnixStylePath;
+import org.knime.filehandling.core.filechooser.NioFileSystemView;
 
 /**
- * Local KNIME relative to File System path.
+ * KNIME relative-to file system view.
  *
  * @author Sascha Wolke, KNIME GmbH
  */
-public class LocalRelativeToPath extends UnixStylePath {
+public class RelativeToFileSystemView extends NioFileSystemView {
 
     /**
-     * Creates an UnixStylePath from the given bucket name and object key
+     * Constructs a new KNIME relative-to file system view.
      *
-     * @param fileSystem the file system
-     * @param first first part of the path
-     * @param more subsequent parts of the path
+     * @param fileSystem the file system to wrap the view around
      */
-    public LocalRelativeToPath(final LocalRelativeToFileSystem fileSystem, final String first,
-        final String... more) {
-        super(fileSystem, first, more);
-    }
-
-    @Override
-    public LocalRelativeToFileSystem getFileSystem() {
-        return (LocalRelativeToFileSystem) super.getFileSystem();
-    }
-
-    @SuppressWarnings("resource")
-    @Override
-    public LocalRelativeToPath toAbsolutePath() {
-        if (isAbsolute()) {
-            return this;
-        } else {
-            return (LocalRelativeToPath) getFileSystem().getWorkingDirectory().resolve(this);
-        }
-    }
-
-    @Override
-    public URI toUri() {
-        try {
-            final boolean workflowRelativeFS = getFileSystem().getPathConfig().isWorkflowRelativeFileSystem();
-            final String path;
-
-            if (workflowRelativeFS && isAbsolute()) {
-                path = getFileSystem().getSeparator() + getFileSystem().getWorkingDirectory().relativize(this);
-            } else if (workflowRelativeFS) {
-                path = getFileSystem().getSeparator() + this;
-            } else {
-                path = toAbsolutePath().toString();
-            }
-
-            return new URI(m_fileSystem.getSchemeString(), m_fileSystem.getHostString(), //
-                URIUtil.encodePath(path), null);
-        } catch (URIException | URISyntaxException ex) {
-            throw new IllegalArgumentException(ex);
-        }
-    }
-
-    /**
-     * Appends this path to the given base directory without file system specific separators.
-     *
-     * @param baseDir base directory to append this path to
-     * @return base directory with this path appended
-     */
-    protected Path appendToBaseDir(final Path baseDir) {
-        return Paths.get(baseDir.toString(), m_pathParts.toArray(new String[0]));
+    public RelativeToFileSystemView(final BaseRelativeToFileSystem fileSystem) {
+        super(fileSystem, fileSystem.getWorkingDirectory());
     }
 }

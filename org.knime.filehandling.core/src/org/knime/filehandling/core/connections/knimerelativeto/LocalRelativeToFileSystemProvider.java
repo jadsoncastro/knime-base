@@ -50,30 +50,12 @@ package org.knime.filehandling.core.connections.knimerelativeto;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
-import java.nio.channels.SeekableByteChannel;
-import java.nio.file.AccessMode;
-import java.nio.file.CopyOption;
-import java.nio.file.DirectoryStream.Filter;
-import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileAttribute;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
 
-import org.knime.core.node.workflow.WorkflowPersistor;
 import org.knime.filehandling.core.connections.WorkflowAware;
-import org.knime.filehandling.core.connections.base.BaseFileSystemProvider;
-import org.knime.filehandling.core.connections.base.attributes.BaseFileAttributes;
 import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection;
 import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection.Type;
 import org.knime.filehandling.core.util.MountPointFileSystemAccessService;
@@ -83,10 +65,8 @@ import org.knime.filehandling.core.util.MountPointFileSystemAccessService;
  *
  * @author Sascha Wolke, KNIME GmbH
  */
-public class LocalRelativeToFileSystemProvider
-    extends BaseFileSystemProvider<LocalRelativeToPath, LocalRelativeToFileSystem> implements WorkflowAware {
-
-    private static final String SCHEME = "knime";
+public class LocalRelativeToFileSystemProvider extends BaseRelativeToFileSystemProvider<LocalRelativeToFileSystem>
+    implements WorkflowAware {
 
     @Override
     protected LocalRelativeToFileSystem createFileSystem(final URI uri, final Map<String, ?> env)
@@ -97,10 +77,7 @@ public class LocalRelativeToFileSystemProvider
             throw new IllegalArgumentException("Unsupported file system type: '" + uri.getHost() + "'.");
         }
 
-        final LocalRelativeToPathConfig pathConfig = new LocalRelativeToPathConfig(connectionType);
-
-        return new LocalRelativeToFileSystem(this, uri, pathConfig, false);
-
+        return new LocalRelativeToFileSystem(this, uri, connectionType, false);
     }
 
     /**
@@ -115,141 +92,9 @@ public class LocalRelativeToFileSystemProvider
         return provider.getOrCreateFileSystem(uri, null);
     }
 
-    private Path toLocalPathWithAccessibilityCheck(final LocalRelativeToPath path) throws NoSuchFileException {
-        return getFileSystemInternal().toLocalPathWithAccessibilityCheck(path);
-    }
-
-    @Override
-    protected InputStream newInputStreamInternal(final LocalRelativeToPath path, final OpenOption... options) throws IOException {
-        final Path localPath = toLocalPathWithAccessibilityCheck(path);
-
-        if (LocalRelativeToPathConfig.isLocalWorkflowFolder(localPath)) {
-            throw new IOException("Workflows cannot be opened for reading");
-        }
-
-        return Files.newInputStream(localPath, options);
-    }
-
-    @Override
-    protected OutputStream newOutputStreamInternal(final LocalRelativeToPath path, final OpenOption... options) throws IOException {
-        final Path localPath = toLocalPathWithAccessibilityCheck(path);
-
-        if (LocalRelativeToPathConfig.isLocalWorkflowFolder(localPath)) {
-            throw new IOException("Workflows cannot be opened for writing");
-        }
-
-        return Files.newOutputStream(localPath, options);
-    }
-
-    @Override
-    protected Iterator<LocalRelativeToPath> createPathIterator(final LocalRelativeToPath path, final Filter<? super Path> filter) throws IOException {
-        return new LocalRelativeToPathIterator(path, toLocalPathWithAccessibilityCheck(path), filter);
-    }
-
-    @Override
-    protected boolean exists(final LocalRelativeToPath path) throws IOException {
-        return getFileSystemInternal().existsWithAccessibilityCheck(path);
-    }
-
-    @Override
-    protected void deleteInternal(final LocalRelativeToPath path) throws IOException {
-        Files.delete(toLocalPathWithAccessibilityCheck(path));
-    }
-
-    @Override
-    public String getScheme() {
-        return SCHEME;
-    }
-
-    @Override
-    protected SeekableByteChannel newByteChannelInternal(final LocalRelativeToPath path,
-        final Set<? extends OpenOption> options, final FileAttribute<?>... attrs) throws IOException {
-
-        final Path localPath = toLocalPathWithAccessibilityCheck(path);
-
-        if (LocalRelativeToPathConfig.isLocalWorkflowFolder(localPath)) {
-            throw new IOException("Workflows cannot be opened for reading/writing");
-        }
-
-        return Files.newByteChannel(localPath, options);
-    }
-
-    @Override
-    protected void createDirectoryInternal(final LocalRelativeToPath dir, final FileAttribute<?>... attrs)
-        throws IOException {
-        Files.createDirectory(toLocalPathWithAccessibilityCheck(checkCastAndAbsolutizePath(dir)), attrs);
-    }
-
-    @Override
-    protected void copyInternal(final LocalRelativeToPath source, final LocalRelativeToPath target,
-        final CopyOption... options) throws IOException {
-        Files.copy(toLocalPathWithAccessibilityCheck(source), toLocalPathWithAccessibilityCheck(target), options);
-    }
-
-    @Override
-    protected void moveInternal(final LocalRelativeToPath source, final LocalRelativeToPath target,
-        final CopyOption... options) throws IOException {
-        Files.move(toLocalPathWithAccessibilityCheck(source), toLocalPathWithAccessibilityCheck(target), options);
-    }
-
-    @Override
-    public boolean isSameFileInternal(final LocalRelativeToPath path, final LocalRelativeToPath path2)
-        throws IOException {
-        return Files.isSameFile(toLocalPathWithAccessibilityCheck(path), toLocalPathWithAccessibilityCheck(path2));
-    }
-
-    @Override
-    public boolean isHidden(final Path path) throws IOException {
-        if (path.getFileName().toString().equals(WorkflowPersistor.METAINFO_FILE)) {
-            return true;
-        } else {
-            return Files.isHidden(toLocalPathWithAccessibilityCheck(checkCastAndAbsolutizePath(path)));
-        }
-    }
-
-    @SuppressWarnings("resource")
-    @Override
-    public FileStore getFileStore(final Path path) throws IOException {
-        return getFileSystemInternal().getDefaultFileStore();
-    }
-
-    @SuppressWarnings("resource")
-    @Override
-    protected void checkAccessInternal(final LocalRelativeToPath path, final AccessMode... modes) throws IOException {
-        final Path localPath = toLocalPathWithAccessibilityCheck(path);
-        localPath.getFileSystem().provider().checkAccess(localPath);
-    }
-
-    @SuppressWarnings("resource")
-    @Override
-    protected BaseFileAttributes fetchAttributesInternal(final LocalRelativeToPath path, final Class<?> type) throws IOException {
-        if (type == BasicFileAttributes.class) {
-            final Path localPath = toLocalPathWithAccessibilityCheck(path);
-
-            final boolean isRegularFile = getFileSystemInternal().isRegularFile(path);
-
-            final BasicFileAttributes localAttributes =
-                Files.readAttributes(localPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-
-            return new BaseFileAttributes(
-                isRegularFile, //
-                path, //
-                localAttributes.lastModifiedTime(), //
-                localAttributes.lastAccessTime(), //
-                localAttributes.creationTime(), //
-                localAttributes.size(), //
-                localAttributes.isSymbolicLink(), //
-                localAttributes.isOther(), //
-                null);
-        }
-
-        throw new UnsupportedOperationException(String.format("only %s supported", BasicFileAttributes.class));
-    }
-
     @Override
     public void deployWorkflow(final File source, final Path dest, final boolean overwrite, final boolean attemptOpen)
         throws IOException {
         MountPointFileSystemAccessService.instance().deployWorkflow(source, dest.toUri(), overwrite, attemptOpen);
     }
-
 }

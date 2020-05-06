@@ -42,66 +42,46 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
+ *
+ * History
+ *   Feb 11, 2020 (Sascha Wolke, KNIME GmbH): created
  */
 package org.knime.filehandling.core.connections.knimerelativeto;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.DirectoryStream.Filter;
-import java.nio.file.Files;
-import java.nio.file.NotDirectoryException;
-import java.nio.file.Path;
-import java.util.Iterator;
+import javax.swing.filechooser.FileView;
+
+import org.knime.filehandling.core.connections.base.WorkflowAwareFileView;
+import org.knime.filehandling.core.defaultnodesettings.FilesHistoryPanel;
+import org.knime.filehandling.core.filechooser.NioFileSystemBrowser;
 
 /**
- * Iterates over all the files and folders of the path on a local KNIME relative to File System.
+ * A KNIME File System Browser allowing the {@link FilesHistoryPanel} to browse a local KNIME relative-to file system.
  *
  * @author Sascha Wolke, KNIME GmbH
  */
-public class LocalRelativeToPathIterator implements Iterator<LocalRelativeToPath> {
-
-    private Iterator<LocalRelativeToPath> m_iterator;
+public class RelativeToFileSystemBrowser extends NioFileSystemBrowser {
+    private final BaseRelativeToFileSystem m_fileSystem;
 
     /**
-     * Creates an iterator over all the files and folder in the given paths location.
+     * Creates a new local KNIME relative-to file system browser with a view and base location.
      *
-     * @param knimePath path in the relative-to file system to iterate over
-     * @param localPath path in the local file system to iterate over
-     * @param filter
-     * @throws IOException on I/O errors
+     * @param fileSystem the file system to use
      */
-    public LocalRelativeToPathIterator(final LocalRelativeToPath knimePath, final Path localPath,
-        final Filter<? super Path> filter) throws IOException {
-
-        if (!Files.isDirectory(knimePath)) {
-            throw new NotDirectoryException(knimePath.toString());
-        }
-
-        try {
-            m_iterator = Files.list(localPath)
-                .map(p -> (LocalRelativeToPath)knimePath.resolve(p.getFileName().toString())).filter(p -> {
-                    try {
-                        return filter.accept(p);
-                    } catch (final IOException ex) { // wrap exception
-                        throw new UncheckedIOException(ex);
-                    }
-                }).iterator();
-        } catch (final UncheckedIOException ex) { // unwrap exception
-            if (ex.getCause() != null) {
-                throw ex.getCause();
-            } else {
-                throw ex;
-            }
-        }
+    public RelativeToFileSystemBrowser(final BaseRelativeToFileSystem fileSystem) {
+        super(new RelativeToFileSystemView(fileSystem));
+        m_fileSystem = fileSystem;
     }
 
     @Override
-    public boolean hasNext() {
-        return m_iterator.hasNext();
+    protected FileView getFileView() {
+        return new WorkflowAwareFileView();
     }
 
+    /**
+     * Convert the selected file to a relative path in workflow relative mode.
+     */
     @Override
-    public LocalRelativeToPath next() {
-        return m_iterator.next();
+    protected String postprocessSelectedFilePath(final String selectedFile) {
+        return m_fileSystem.getWorkingDirectory().relativize(m_fileSystem.getPath(selectedFile)).toString();
     }
 }
