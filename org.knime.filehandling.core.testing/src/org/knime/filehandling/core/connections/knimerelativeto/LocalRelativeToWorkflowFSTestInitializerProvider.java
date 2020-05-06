@@ -62,7 +62,7 @@ public class LocalRelativeToWorkflowFSTestInitializerProvider implements FSTestI
 
 	@Override
 	public FSTestInitializer setup(final Map<String, String> configuration) {
-		return new LocalRelativeToFSTestInitializer(configuration.get("root"), KNIME_FS_HOST);
+		return new LocalRelativeToFSTestInitializer(KNIME_FS_HOST);
 	}
 
 	@Override

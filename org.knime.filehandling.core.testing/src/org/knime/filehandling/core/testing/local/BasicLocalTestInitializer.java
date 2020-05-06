@@ -53,10 +53,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
-import org.apache.commons.io.FileUtils;
-import org.knime.filehandling.core.connections.local.LocalPath;
 import org.knime.filehandling.core.testing.FSTestInitializer;
 
 /**
@@ -66,23 +63,14 @@ import org.knime.filehandling.core.testing.FSTestInitializer;
  */
 public abstract class BasicLocalTestInitializer implements FSTestInitializer {
 
-	private final String m_rootFolder;
 	private Path m_currTempFolder;
 
-	protected BasicLocalTestInitializer(final String root) {
-		m_rootFolder = root;
-	}
-
 	@Override
-	public void beforeTestCase() throws IOException {
-		m_currTempFolder = Files.createTempDirectory(Paths.get(m_rootFolder), null);
+	public void beforeTestCase(final Path tmpDir, final Path dummyWorkflow) throws IOException {
+		m_currTempFolder = tmpDir;
 	}
 
-	@Override
-	public void afterTestCase() throws IOException {
-		FileUtils.deleteDirectory(m_currTempFolder.toFile());
-	}
-
+	/** @return temporary directory */
 	protected Path getTempFolder() {
 		return m_currTempFolder;
 	}

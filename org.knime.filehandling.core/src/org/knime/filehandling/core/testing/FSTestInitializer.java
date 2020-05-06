@@ -76,6 +76,17 @@ public interface FSTestInitializer {
     }
 
     /**
+     * Hook called before each test case, allowing each implementation to modify the initializer before each test case.
+     *
+     * @param tmpDir path to local temporary directory
+     * @param dummyWorkflow path to a dummy workflow
+     * @throws IOException
+     */
+    public default void beforeTestCase(final Path tmpDir, final Path dummyWorkflow) throws IOException {
+        // default: do nothing
+    }
+
+    /**
      * Hook called after each test case, allowing each implementation to modify the initializer after each test case.
      */
     default public void afterTestCase() throws IOException {

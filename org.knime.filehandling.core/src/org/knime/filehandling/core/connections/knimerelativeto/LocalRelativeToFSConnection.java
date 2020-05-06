@@ -54,8 +54,6 @@ import java.net.URI;
 
 import org.knime.core.node.util.FileSystemBrowser;
 import org.knime.filehandling.core.connections.FSConnection;
-import org.knime.filehandling.core.connections.FSFileSystem;
-import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection.Type;
 
 /**
  * {@link FSConnection} implementation for the local relative-to file system.
@@ -71,10 +69,9 @@ public class LocalRelativeToFSConnection implements FSConnection {
     /**
      * Constructor.
      *
-     * @param type The type of the file system (mountpoint- or workflow relative).
+     * @param fsKey The URI of the file system (mountpoint- or workflow relative).
      */
-    public LocalRelativeToFSConnection(final Type type) {
-        final URI fsKey = URI.create(type.getSchemeAndHost());
+    public LocalRelativeToFSConnection(final URI fsKey) {
         try {
             m_fileSystem = LocalRelativeToFileSystemProvider.getOrCreateFileSystem(fsKey);
             m_browser = new RelativeToFileSystemBrowser(m_fileSystem);
@@ -84,7 +81,7 @@ public class LocalRelativeToFSConnection implements FSConnection {
     }
 
     @Override
-    public FSFileSystem<?> getFileSystem() {
+    public LocalRelativeToFileSystem getFileSystem() {
         return m_fileSystem;
     }
 
