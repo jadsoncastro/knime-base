@@ -26,6 +26,7 @@ import org.junit.rules.TemporaryFolder;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.workflow.NodeContext;
 import org.knime.core.node.workflow.WorkflowManager;
+import org.knime.filehandling.core.connections.local.LocalFileSystemProvider;
 
 /**
  * Test local relative to file system specific things.
@@ -227,7 +228,8 @@ public class KNIMELocalRelativeToFileSystemTest {
 		final LocalRelativeToFileSystem mountpointFS = getMountpointRelativeFS();
 		final RelativeToPath mountpointPath = mountpointFS.getPath(filename);
 		final Path convertedLocalPath = mountpointFS.toRealPathWithAccessibilityCheck(mountpointPath);
-		final Path realLocalPath = m_mountpointRoot.toPath().resolve("some-dir").resolve("some-file.txt");
+		final Path realLocalPath = LocalFileSystemProvider.INSTANCE.getPath(
+			m_mountpointRoot.toPath().toUri()).resolve("some-dir").resolve("some-file.txt");
 		assertEquals(realLocalPath, convertedLocalPath);
 	}
 

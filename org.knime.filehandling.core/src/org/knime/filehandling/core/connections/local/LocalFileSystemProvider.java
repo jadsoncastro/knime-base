@@ -74,7 +74,7 @@ import org.knime.filehandling.core.connections.FSFileSystemProvider;
  *
  * @author bjoern
  */
-class LocalFileSystemProvider extends FSFileSystemProvider<LocalPath, LocalFileSystem> {
+public class LocalFileSystemProvider extends FSFileSystemProvider<LocalPath, LocalFileSystem> {
 
     public static final LocalFileSystemProvider INSTANCE = new LocalFileSystemProvider();
 

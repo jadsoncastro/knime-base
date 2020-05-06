@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.knime.core.node.workflow.WorkflowContext;
+import org.knime.filehandling.core.connections.local.LocalFileSystemProvider;
 import org.knime.filehandling.core.defaultnodesettings.FileSystemChoice.Choice;
 import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection.Type;
 
@@ -111,8 +112,10 @@ public class LocalRelativeToFileSystem extends BaseRelativeToFileSystem {
                 "Unsupported temporary copy of workflow detected. Relative to does not support server execution.");
         }
 
-        m_localMountpointDirectory = workflowContext.getMountpointRoot().toPath().toAbsolutePath().normalize();
-        m_localWorkflowDirectory = workflowContext.getCurrentLocation().toPath().toAbsolutePath().normalize();
+        m_localMountpointDirectory = LocalFileSystemProvider.INSTANCE.getPath(
+            workflowContext.getMountpointRoot().toPath().toUri()).toAbsolutePath().normalize();
+        m_localWorkflowDirectory = LocalFileSystemProvider.INSTANCE.getPath(
+            workflowContext.getCurrentLocation().toPath().toUri()).toAbsolutePath().normalize();
         m_workflowDirectory = localToRelativeToPath(m_localWorkflowDirectory);
         m_localFileStore = getFileStore(m_localWorkflowDirectory, getFileStoreType(), "default_file_store");
         m_fileStores = Collections.unmodifiableList(Collections.singletonList(m_localFileStore));
@@ -155,7 +158,8 @@ public class LocalRelativeToFileSystem extends BaseRelativeToFileSystem {
      */
     private Path toAbsoluteLocalPath(final RelativeToPath path) {
         final RelativeToPath absolutePath = (RelativeToPath) path.toAbsolutePath().normalize();
-        return absolutePath.appendToBaseDir(m_localMountpointDirectory);
+        final Path realPath =  absolutePath.appendToBaseDir(m_localMountpointDirectory);
+        return LocalFileSystemProvider.INSTANCE.getPath(realPath.toUri());
     }
 
     /**

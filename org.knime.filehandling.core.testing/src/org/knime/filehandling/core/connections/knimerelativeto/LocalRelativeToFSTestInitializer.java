@@ -62,6 +62,8 @@ import org.knime.core.node.workflow.WorkflowPersistor.WorkflowLoadResult;
 import org.knime.core.util.FileUtil;
 import org.knime.core.util.LockFailedException;
 import org.knime.filehandling.core.connections.FSConnection;
+import org.knime.filehandling.core.connections.local.LocalFileSystemProvider;
+import org.knime.filehandling.core.connections.local.LocalPath;
 import org.knime.filehandling.core.testing.local.BasicLocalTestInitializer;
 
 /**
@@ -155,7 +157,8 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
 	public RelativeToPath createFileWithContent(final String content, final String... pathComponents)
 			throws IOException {
 	    final Path localFile = super.createLocalFileWithContent(content, pathComponents);
+	    final LocalPath localPath = LocalFileSystemProvider.INSTANCE.getPath(localFile.toUri());
 	    
-		return getFileSystem().localToRelativeToPath(localFile);
+		return getFileSystem().localToRelativeToPath(localPath);
 	}
 }
