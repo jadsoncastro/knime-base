@@ -48,11 +48,16 @@
  */
 package org.knime.filehandling.core.defaultnodesettings;
 
+import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileSystem;
 import java.util.Optional;
 
+import org.apache.commons.lang3.Validate;
+import org.knime.core.node.workflow.NodeContext;
+import org.knime.core.node.workflow.WorkflowContext;
 import org.knime.filehandling.core.connections.FSConnection;
+import org.knime.filehandling.core.connections.FileSystemExtensionHelper;
 import org.knime.filehandling.core.connections.knimerelativeto.LocalRelativeToFSConnection;
 import org.knime.filehandling.core.connections.knimeremote.KNIMERemoteFSConnection;
 import org.knime.filehandling.core.connections.local.LocalFSConnection;
@@ -73,9 +78,10 @@ public class FileSystemHelper {
      * @param settings {@link SettingsModelFileChooser2} instance.
      * @param timeoutInMillis timeout in milliseconds, or -1 if not applicable.
      * @return {@link FileSystem} to use.
+     * @throws IOException
      */
     public static final FSConnection retrieveFSConnection(final Optional<FSConnection> portObjectConnection,
-        final SettingsModelFileChooser2 settings, final int timeoutInMillis) {
+        final SettingsModelFileChooser2 settings, final int timeoutInMillis) throws IOException {
 
         final FileSystemChoice choice = settings.getFileSystemChoice();
         final FSConnection toReturn;
@@ -95,9 +101,7 @@ public class FileSystemHelper {
                 toReturn = new KNIMERemoteFSConnection(connection);
                 break;
             case KNIME_FS:
-                final String knimeFileSystemHost = settings.getKNIMEFileSystem();
-                final Type connectionTypeForHost = KNIMEConnection.connectionTypeForHost(knimeFileSystemHost);
-                toReturn = new LocalRelativeToFSConnection(connectionTypeForHost);
+                toReturn = getRelativeToConnection(settings.getKNIMEFileSystem(), timeoutInMillis);
                 break;
             case CONNECTED_FS:
                 toReturn = portObjectConnection.orElseThrow(() -> new IllegalArgumentException(
@@ -110,4 +114,28 @@ public class FileSystemHelper {
         return toReturn;
     }
 
+    private static FSConnection getRelativeToConnection(final String knimeFileSystemHost, final long timeoutInMillis)
+        throws IOException {
+
+        final Type connectionTypeForHost = KNIMEConnection.connectionTypeForHost(knimeFileSystemHost);
+        final URI fsKey = URI.create(connectionTypeForHost.getSchemeAndHost());
+
+        if (isServerContext()) {
+            return FileSystemExtensionHelper //
+                .getFSConnectionProvider("knime-server-relative-to") //
+                .getConnection(fsKey, timeoutInMillis);
+        } else {
+            return new LocalRelativeToFSConnection(connectionTypeForHost);
+        }
+    }
+
+    private static boolean isServerContext() {
+        final NodeContext nodeContext = NodeContext.getContext();
+        Validate.notNull(nodeContext, "Node context required.");
+
+        final WorkflowContext context = nodeContext.getWorkflowManager().getContext();
+        Validate.notNull(context, "Workflow context required.");
+
+        return context.getRemoteRepositoryAddress().isPresent() && context.getServerAuthToken().isPresent();
+    }
 }
