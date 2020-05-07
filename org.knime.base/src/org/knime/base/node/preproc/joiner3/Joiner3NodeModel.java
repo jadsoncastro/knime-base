@@ -64,6 +64,7 @@ import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettings;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.context.ports.PortsConfiguration;
 import org.knime.core.node.property.hilite.DefaultHiLiteMapper;
 import org.knime.core.node.property.hilite.HiLiteHandler;
 import org.knime.core.node.property.hilite.HiLiteMapper;
@@ -90,22 +91,17 @@ public class Joiner3NodeModel extends NodeModel {
      */
     private final Joiner m_joiner;
 
-    /**
-     * Creates a new model for the Joiner node.
-     */
-    public Joiner3NodeModel() {
-        super(2, 1);
-
+    Joiner3NodeModel(final PortsConfiguration portsConfiguration) {
+        super(portsConfiguration.getInputPorts(), portsConfiguration.getOutputPorts());
         m_joiner = new Joiner();
 
         m_outHandler = new HiLiteHandler();
         m_leftTranslator = new HiLiteTranslator();
         m_rightTranslator = new HiLiteTranslator();
+
     }
 
-    /**
-     * {@inheritDoc}
-     */
+
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {

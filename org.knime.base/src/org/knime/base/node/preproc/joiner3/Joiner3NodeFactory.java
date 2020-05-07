@@ -41,61 +41,73 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- * 
- * History
- *   27.07.2007 (thor): created
  */
 package org.knime.base.node.preproc.joiner3;
 
+import java.util.Optional;
+
+import org.knime.core.node.BufferedDataTable;
+import org.knime.core.node.ConfigurableNodeFactory;
 import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeFactory;
-import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeView;
+import org.knime.core.node.context.NodeCreationConfiguration;
 
 /**
  * This factory create all necessary classes for the joiner node.
- * 
+ *
+ * @author Carl Witt, KNIME AG, Zurich, Switzerland
  * @author Thorsten Meinl, University of Konstanz
+ *
  */
-public class Joiner3NodeFactory extends NodeFactory {
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected NodeDialogPane createNodeDialogPane() {
-        return new Joiner3NodeDialog();
-    }
+public class Joiner3NodeFactory extends ConfigurableNodeFactory<Joiner3NodeModel> {
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public NodeModel createNodeModel() {
-        return new Joiner3NodeModel();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public NodeView createNodeView(final int viewIndex,
-            final NodeModel nodeModel) {
-        return null;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected int getNrNodeViews() {
+    public int getNrNodeViews() {
         return 0;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    protected boolean hasDialog() {
+    public NodeView<Joiner3NodeModel> createNodeView(final int viewIndex, final Joiner3NodeModel nodeModel) {
+        throw new IndexOutOfBoundsException();
+    }
+
+    @Override
+    public boolean hasDialog() {
         return true;
     }
+
+    // when changing any of these, change the group identifiers in the factory.xml as well.
+    private final static String outerGroupId = "Outer table";
+    private final static String innerGroupId = "Inner table";
+    private final static String additionalInnerGroupId = "Additional inner table";
+    private final static String resultId = "Join result";
+
+    @Override
+    protected Optional<PortsConfigurationBuilder> createPortsConfigBuilder() {
+        PortsConfigurationBuilder b = new PortsConfigurationBuilder();
+
+        // two mandatory inputs: outer and inner table
+        b.addFixedInputPortGroup(outerGroupId, BufferedDataTable.TYPE);
+        b.addFixedInputPortGroup(innerGroupId, BufferedDataTable.TYPE);
+
+        // optional additional input ports
+        b.addExtendableInputPortGroup(additionalInnerGroupId, BufferedDataTable.TYPE);
+
+        // single output
+        b.addFixedOutputPortGroup(resultId, BufferedDataTable.TYPE);
+
+        return Optional.of(b);
+    }
+
+    @Override
+    protected Joiner3NodeModel createNodeModel(final NodeCreationConfiguration creationConfig) {
+        // cannot be null due to #createPortsConfigBuilder's correctness
+        return new Joiner3NodeModel(creationConfig.getPortConfig().get());
+    }
+
+    @Override
+    protected NodeDialogPane createNodeDialogPane(final NodeCreationConfiguration creationConfig) {
+        return new Joiner3NodeDialog();
+    }
+
 }

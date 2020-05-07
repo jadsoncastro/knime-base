@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<knimeNode icon="./joiner.png" type="Manipulator" xmlns="http://knime.org/node/v3.6" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://knime.org/node/v3.6 http://knime.org/node/v3.6.xsd">
+<knimeNode icon="./joiner.png" type="Manipulator" xmlns="http://knime.org/node/v4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://knime.org/node/v4.1 http://knime.org/node/v4.1.xsd">
     <name>Joiner</name>
-    <shortDescription>Joins two tables</shortDescription>
+    <shortDescription>Joins two or more tables</shortDescription>
     <fullDescription>
         <intro>
             This node joins two tables in a database-like way. The join is based 
@@ -95,8 +95,9 @@
 		</link>
     </fullDescription>
     <ports>
-        <inPort index="0" name="Top Input ('left' table)">Table contributing to the left part of the output table</inPort>
-        <inPort index="1" name="Bottom Input ('right' table)">Table contributing to the right part of the output table</inPort>
-        <outPort index="0" name="Joined table">Joined Table</outPort>
+        <inPort index="0" name="Outer table">The outer table contributes the leftmost row values. This port supports streaming.</inPort>
+        <inPort index="1" name="Inner table">The first inner table contributes the values of the second column set.</inPort>
+        <dynInPort name="Additional inner table" group-identifier="Additional inner table" insert-before="2"></dynInPort>
+        <outPort index="0" name="Join result">The composite table resulting from combining matching input rows from all input tables.</outPort>
     </ports>
 </knimeNode>
