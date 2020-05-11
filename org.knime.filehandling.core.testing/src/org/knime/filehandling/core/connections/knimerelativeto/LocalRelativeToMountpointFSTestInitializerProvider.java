@@ -57,7 +57,7 @@ import org.knime.filehandling.core.testing.FSTestInitializerProvider;
  */
 public class LocalRelativeToMountpointFSTestInitializerProvider implements FSTestInitializerProvider {
 
-    private static final String FS_NAME = "relativeToMountpoint";
+    private static final String FS_NAME = "localRelativeToMountpoint";
 
     private static final String KNIME_FS_HOST = "knime.mountpoint";
 

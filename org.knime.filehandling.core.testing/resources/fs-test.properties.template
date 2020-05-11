@@ -22,8 +22,23 @@
 
 local.root = <name-of-the-folder-created-in-temp-directory>
 
-relativeToMountpoint.root = <name-of-the-folder-created-in-temp-directory>
-relativeToWorkflow.root = <name-of-the-folder-created-in-temp-directory>
+localRelativeToMountpoint.root = <name-of-the-folder-created-in-temp-directory>
+localRelativeToWorkflow.root = <name-of-the-folder-created-in-temp-directory>
+
+rest.url = http://localhost:8080/knime/rest/v4/repository
+rest.root = /unit-tests
+rest.user = admin
+rest.pass = admin
+
+remoteRelativeToMountpoint.url = http://localhost:8080/knime/rest/v4/repository
+remoteRelativeToMountpoint.root = /unit-tests-mountpoint-relative
+remoteRelativeToMountpoint.user = admin
+remoteRelativeToMountpoint.pass = admin
+
+remoteRelativeToWorkflow.url = http://localhost:8080/knime/rest/v4/repository
+remoteRelativeToWorkflow.root = /unit-tests-workflow-relative
+remoteRelativeToWorkflow.user = admin
+remoteRelativeToWorkflow.pass = admin
 
 s3.host = eu-west-1
 s3.protocol = s3
