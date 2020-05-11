@@ -60,6 +60,7 @@ import org.knime.core.node.ExecutionContext;
  *
  * @author Heiko Hofer
  */
+@Deprecated
 final class JoinContainer {
     private BufferedDataContainer m_matches;
 

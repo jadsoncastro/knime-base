@@ -61,6 +61,7 @@ import org.knime.core.data.def.StringCell;
  *
  * @author Heiko Hofer
  */
+@Deprecated
 class InputRow implements Comparable<InputRow> {
 
     private DataRow m_row;
@@ -101,7 +102,7 @@ class InputRow implements Comparable<InputRow> {
      *
      * @return the JoinTuples of this row.
      */
-    JoinTuple[] getJoinTuples() {
+    DataCell[][] getJoinTuples() {
         List<Integer> indices = null;
         indices = m_settings.getJoiningIndices(m_port);
         if (!m_settings.getMatchAny()) {
@@ -117,10 +118,10 @@ class InputRow implements Comparable<InputRow> {
                     cells[i] = new StringCell(m_row.getKey().getString());
                 }
             }
-            return new JoinTuple[]{new JoinTuple(cells)};
+            return new DataCell[][] {cells};
         } else {
             int numJoinAttributes = indices.size();
-            JoinTuple[] joinCells = new JoinTuple[numJoinAttributes];
+            DataCell[][] joinCells = new DataCell[numJoinAttributes][];
 
             for (int i = 0; i < numJoinAttributes; i++) {
                 int index = indices.get(i);
@@ -135,7 +136,7 @@ class InputRow implements Comparable<InputRow> {
                     // StringCell's
                     cells[i] = new StringCell(m_row.getKey().getString());
                 }
-                joinCells[i] = new JoinTuple(cells);
+                joinCells[i] = cells;
             }
             return joinCells;
         }

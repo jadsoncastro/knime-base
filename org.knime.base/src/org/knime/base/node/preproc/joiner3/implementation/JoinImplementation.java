@@ -77,6 +77,7 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeLogger;
+import org.knime.core.node.streamable.StreamableFunction;
 import org.knime.core.util.UniqueNameGenerator;
 
 /**
@@ -552,7 +553,7 @@ public abstract class JoinImplementation {
                     cells[i] = new StringCell(row.getKey().getString());
                 }
             }
-            return new JoinTuple(cells);
+            return new JoinTuple(cells); //new JoinTuple(cells);
         };
     }
 
@@ -616,4 +617,10 @@ public abstract class JoinImplementation {
         }
 
     }
+
+
+    /**
+     * @return
+     */
+    protected abstract StreamableFunction getStreamableFunction();
 }

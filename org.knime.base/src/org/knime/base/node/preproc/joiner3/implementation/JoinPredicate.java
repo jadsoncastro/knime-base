@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -40,30 +41,22 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ------------------------------------------------------------------------
+ * ---------------------------------------------------------------------
  *
  * History
- *   16.12.2009 (Heiko Hofer): created
+ *   May 7, 2020 (carlwitt): created
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
-import org.knime.core.data.RowKey;
-
 /**
- * This implementation uses one of the given row keys as the joined row key. It
- * uses the one which is not null or the left key if both are not null.
  *
- * @author Heiko Hofer
+ * Encapsulates logic for testing whether a combination of rows qualifies for inclusion in the composite table.
+ *
+ * @author Carl Witt, KNIME AG, Zurich, Switzerland
+ *
  */
-@Deprecated
-public class UseSingleRowKeyFactory implements JoinedRowKeyFactory {
+public class JoinPredicate {
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
-        return null != leftKey ? leftKey : rightKey;
-    }
+
 
 }

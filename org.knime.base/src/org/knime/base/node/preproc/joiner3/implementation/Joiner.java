@@ -67,6 +67,7 @@ import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.streamable.StreamableFunction;
 import org.knime.core.util.UniqueNameGenerator;
 
 /**
@@ -88,6 +89,10 @@ public class Joiner {
 //    List<String> m_leftSurvivors;
 //    // TODO legacy
 //    List<String> m_rightSurvivors;
+
+    public Joiner() {
+
+    }
 
     /**
      * @param settings
@@ -314,6 +319,18 @@ public class Joiner {
         m_joinStrategy = settings.getJoinAlgorithm().getFactory().create(settings, tables);
 
         return m_joinStrategy.twoWayJoin(exec, tables[0], tables[1]);
+    }
+
+    /**
+     * @param inputSpecs
+     * @param settings
+     * @return
+     */
+    public StreamableFunction getStreamableFunction(final Joiner3Settings settings, final DataTableSpec[] inputSpecs) {
+        // the old spec vs table problem -- here we only have the specs. 
+        // downgrading the general interface seem weird, though -- need sizes to choose implementation? 
+        m_joinStrategy = settings.getJoinAlgorithm().getFactory().create(settings, inputSpecs);
+        return m_joinStrategy.getStreamableFunction();
     }
 
 

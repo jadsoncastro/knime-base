@@ -70,6 +70,7 @@ import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.streamable.StreamableFunction;
 
 /**
  *
@@ -170,6 +171,10 @@ public class HashJoin extends JoinImplementation {
         final BufferedDataTable rightTable, final RowHandler unmatched)
         throws CanceledExecutionException, InvalidSettingsException {
 
+        // TODO remove timing
+        long before;
+        long after;
+
         // This does some input data checking, too
         //        DataTableSpec joinedTableSpec = createSpec(new DataTableSpec[] {
         //                leftTable.getDataTableSpec(),
@@ -183,12 +188,7 @@ public class HashJoin extends JoinImplementation {
 
         exec.setProgress("Building Hash Table");
 
-        long before = System.currentTimeMillis();
-
-        HashIndex index = new HashIndex(m_smaller, getExtractor(m_smaller));
-
-        long after = System.currentTimeMillis();
-        System.out.println("Indexing: " + (after - before));
+        HashIndex<JoinTuple> index = buildIndex();
 
         //---------------------------------------------
         // build table spec
@@ -217,6 +217,7 @@ public class HashJoin extends JoinImplementation {
 
         long rowIndex = 0;
 
+        // FIXME this leaves iterators open?
         for (DataRow row : m_bigger) {
 
             exec.checkCanceled();
@@ -273,6 +274,19 @@ public class HashJoin extends JoinImplementation {
         //        return sorted;
     }
 
+    /**
+     * @return
+     */
+    private HashIndex<JoinTuple> buildIndex() {
+        long before = System.currentTimeMillis();
+
+        HashIndex<JoinTuple> index = new HashIndex<>(m_smaller, getExtractor(m_smaller));
+
+        long after = System.currentTimeMillis();
+        System.out.println("Indexing: " + (after - before));
+        return index;
+    }
+
 //    private DataRow createMatchRow() {
 //
 //    }
@@ -319,6 +333,26 @@ public class HashJoin extends JoinImplementation {
 
     private void updateProgress(final ExecutionContext exec, final BufferedDataTable m_bigger, final long rowIndex) {
         exec.setProgress(1. * rowIndex / m_bigger.getRowCount());
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected StreamableFunction getStreamableFunction() {
+        return new StreamableFunction() {
+
+            // constructor
+            {
+                HashIndex<JoinTuple> index = buildIndex();
+            }
+            @Override
+            public DataRow compute(final DataRow input) throws Exception {
+
+                return null;
+            }
+
+        };
     }
 
 }

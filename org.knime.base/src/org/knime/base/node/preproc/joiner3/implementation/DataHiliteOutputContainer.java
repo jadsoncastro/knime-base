@@ -73,6 +73,7 @@ import org.knime.core.node.ExecutionContext;
  *
  * @author Heiko Hofer
  */
+@Deprecated
 class DataHiliteOutputContainer {
     private BufferedDataContainer m_dc;
     private DataTableSpec m_spec;

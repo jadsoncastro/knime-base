@@ -70,6 +70,7 @@ import org.knime.core.data.def.StringCell;
  *
  * @author Heiko Hofer
  */
+@Deprecated
 final class OutputRow {
 
     private OutputRow() {

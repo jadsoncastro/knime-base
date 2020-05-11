@@ -51,6 +51,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
 import org.knime.base.node.preproc.joiner3.implementation.Joiner;
@@ -65,10 +66,21 @@ import org.knime.core.node.NodeSettings;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.context.ports.PortsConfiguration;
+import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.property.hilite.DefaultHiLiteMapper;
 import org.knime.core.node.property.hilite.HiLiteHandler;
 import org.knime.core.node.property.hilite.HiLiteMapper;
 import org.knime.core.node.property.hilite.HiLiteTranslator;
+import org.knime.core.node.streamable.InputPortRole;
+import org.knime.core.node.streamable.OutputPortRole;
+import org.knime.core.node.streamable.PartitionInfo;
+import org.knime.core.node.streamable.PortInput;
+import org.knime.core.node.streamable.PortOutput;
+import org.knime.core.node.streamable.RowInput;
+import org.knime.core.node.streamable.StreamableFunction;
+import org.knime.core.node.streamable.StreamableOperator;
+import org.knime.core.node.streamable.StreamableOperatorInternals;
+import org.knime.core.node.streamable.simple.SimpleStreamableOperatorInternals;
 
 /**
  * This is the model of the joiner node. It delegates the dirty work to the
@@ -101,7 +113,6 @@ public class Joiner3NodeModel extends NodeModel {
 
     }
 
-
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {
@@ -128,6 +139,64 @@ public class Joiner3NodeModel extends NodeModel {
 
         return joinedTable;
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Streaming
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @Override
+    public InputPortRole[] getInputPortRoles() {
+        // mark first input port as streamable, all others nonstreamable
+        // disable distribution for now (however, the joiner is generally amenable to distribution)
+        final InputPortRole[] roles = new InputPortRole[getNrInPorts()];
+        Arrays.fill(roles, InputPortRole.NONDISTRIBUTED_NONSTREAMABLE);
+        roles[0] = InputPortRole.NONDISTRIBUTED_STREAMABLE;
+        return roles;
+    }
+
+    @Override
+    public OutputPortRole[] getOutputPortRoles() {
+        // no distribution, no merging
+        final OutputPortRole[] roles = new OutputPortRole[getNrOutPorts()];
+        Arrays.fill(roles, OutputPortRole.NONDISTRIBUTED);
+        return roles;
+    }
+
+    @Override
+    public StreamableOperator createStreamableOperator(final PartitionInfo partitionInfo, final PortObjectSpec[] inSpecs)
+        throws InvalidSettingsException {
+        return new StreamableOperator() {
+
+            private SimpleStreamableOperatorInternals m_internals;
+
+            @Override
+            public void loadInternals(final StreamableOperatorInternals internals) {
+                m_internals = (SimpleStreamableOperatorInternals) internals;
+            }
+
+            /**
+             * The joiner  delegates the streaming to a join implementation.
+             * <br/>
+             * {@inheritDoc}
+             */
+            @Override
+            public void runFinal(final PortInput[] inputs, final PortOutput[] outputs, final ExecutionContext exec) throws Exception {
+                DataTableSpec[] inputSpecs = Arrays.stream(inputs).map(i -> ((RowInput)i).getDataTableSpec()).toArray(DataTableSpec[]::new);
+                StreamableFunction func = m_joiner.getStreamableFunction(m_settings, inputSpecs);
+                func.runFinal(inputs, outputs, exec);
+            }
+
+            @Override
+            public StreamableOperatorInternals saveInternals() {
+                return m_internals;
+            }
+        };
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // HiLiting
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * {@inheritDoc}

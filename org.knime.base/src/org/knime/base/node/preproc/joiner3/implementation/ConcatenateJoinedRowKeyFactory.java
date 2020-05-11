@@ -55,6 +55,7 @@ import org.knime.core.data.RowKey;
  *
  * @author Heiko Hofer
  */
+@Deprecated
 class ConcatenateJoinedRowKeyFactory implements JoinedRowKeyFactory {
     private String m_separator;
 
@@ -69,6 +70,7 @@ class ConcatenateJoinedRowKeyFactory implements JoinedRowKeyFactory {
     /**
      * {@inheritDoc}
      */
+    @Override
     public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
         StringBuilder builder = new StringBuilder();
         if (null != leftKey) {

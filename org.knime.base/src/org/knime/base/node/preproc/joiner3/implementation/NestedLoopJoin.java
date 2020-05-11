@@ -57,6 +57,7 @@ import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.streamable.StreamableFunction;
 
 /**
  *
@@ -150,6 +151,15 @@ public class NestedLoopJoin extends JoinImplementation {
         return result.getTable();
 
 
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected StreamableFunction getStreamableFunction() {
+        // TODO Auto-generated method stub
+        return null;
     }
 
 

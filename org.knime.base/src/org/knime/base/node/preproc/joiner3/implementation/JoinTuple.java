@@ -111,5 +111,31 @@ class JoinTuple {
     public String toString() {
         return Arrays.toString(m_cells);
     }
+
+    /**
+     * TODO use this in nested loop join, where we can avoid JoinTuples (in a HashJoin with composite keys we can't,
+     * since arrays can't be used as keys in a hashmap unless they match by reference)
+     *
+     * @param cells1
+     * @param cells2
+     * @return
+     */
+    public static boolean equals(final DataCell[] cells1, final DataCell[] cells2) {
+        for (int i = 0; i <cells1.length; i++) {
+            DataCell thisCell = cells1[i];
+            DataCell thatCell = cells2[i];
+            // Missing cells do not match here (see Bug 2625). Note, that
+            // missing cells are viewed to be equal in DataCell::equals().
+            if (thisCell.isMissing() || thatCell.isMissing()) {
+                return false;
+            }
+            // compare the data cells
+            if (!thisCell.equals(thatCell)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 }
 

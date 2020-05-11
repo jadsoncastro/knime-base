@@ -54,6 +54,7 @@ import org.knime.core.data.RowKey;
  *
  * @author Heiko Hofer
  */
+@Deprecated
 interface JoinedRowKeyFactory {
     /**
      * Creates a row key of the joined row.
