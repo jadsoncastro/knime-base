@@ -253,6 +253,16 @@ public abstract class BaseFileSystem<T extends FSPath> extends FSFileSystem<T> {
     }
 
     /**
+     * Removes the attribute of the given path and all entries starting with that path from the attribute cache.
+     *
+     * @param path the path
+     */
+    public void removeFromAttributeCacheRecursive(final Path path) {
+        m_cache.removeAttribute(getCachedAttributesKey(path));
+        m_cache.removeAttributesByPrefix(getCachedAttributesKey(path) + getSeparator());
+    }
+
+    /**
      * Returns an Optional containing the cached file-attributes for a path if present.
      *
      * @param path the path

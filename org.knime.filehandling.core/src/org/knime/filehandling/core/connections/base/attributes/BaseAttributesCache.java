@@ -48,8 +48,10 @@
  */
 package org.knime.filehandling.core.connections.base.attributes;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -118,6 +120,15 @@ public class BaseAttributesCache implements AttributesCache {
     @Override
     public void removeAttribute(final String path) {
         m_attributesCache.invalidate(path);
+    }
+
+    @Override
+    public void removeAttributesByPrefix(final String prefix) {
+        final List<String> keys = m_attributesCache.asMap().keySet() //
+            .parallelStream() //
+            .filter(key -> key.startsWith(prefix)) //
+            .collect(Collectors.toList());
+        m_attributesCache.invalidateAll(keys);
     }
 
 }

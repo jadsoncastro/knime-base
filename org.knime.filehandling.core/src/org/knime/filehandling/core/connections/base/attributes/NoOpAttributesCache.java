@@ -90,4 +90,9 @@ public class NoOpAttributesCache implements AttributesCache {
         //Nothing to do
     }
 
+    @Override
+    public void removeAttributesByPrefix(final String prefix) {
+        //Nothing to do
+    }
+
 }

@@ -85,4 +85,12 @@ public interface AttributesCache {
      */
     void removeAttribute(String path);
 
+    /**
+     * Removes entries from the attributes cache starting with a given prefix.
+     *
+     * Note: The prefix should end with the file system separator.
+     *
+     * @param prefix the prefix of the cache entries to remove
+     */
+    void removeAttributesByPrefix(String prefix);
 }
