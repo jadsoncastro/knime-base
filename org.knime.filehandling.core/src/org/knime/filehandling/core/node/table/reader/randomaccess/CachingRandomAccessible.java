@@ -44,47 +44,66 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Apr 9, 2020 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
+ *   May 16, 2020 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
-package org.knime.filehandling.core.node.table.reader.spec;
+package org.knime.filehandling.core.node.table.reader.randomaccess;
 
-import org.knime.filehandling.core.node.table.reader.randomaccess.AbstractRandomAccessible;
-import org.knime.filehandling.core.node.table.reader.randomaccess.RandomAccessible;
+import java.util.ArrayList;
+
+import gnu.trove.set.hash.TIntHashSet;
 
 /**
- * Filters out a single column from an underlying {@link RandomAccessible}.
+ * A decorator for {@link RandomAccessible RandomAccessibles} that caches values returned by the underlying
+ * {@link RandomAccessible RandomAccessible's} {@link RandomAccessible#get(int)} method.</br>
+ * The cache's capacity is extended whenever a new decoratee whose size is larger than the current capacity of the
+ * cache. The cache is then filled lazily, i.e. whenever the values are retrieved for the first time via
+ * {@link RandomAccessible#get(int)}. We use an {@link ArrayList} as cache under the assumption that the access patterns
+ * are likely to be dense i.e. in most cases most values are actually retrieved from the underlying
+ * {@link RandomAccessible}.
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+ * @param <V> the type of values this {@link RandomAccessible} holds
  */
-final class ColumnFilterRandomAccessible<V> extends AbstractRandomAccessible<V> {
+public final class CachingRandomAccessible<V> implements RandomAccessible<V> {
+
+    private final TIntHashSet m_cachedIdxs = new TIntHashSet();
+
+    private final ArrayList<V> m_cache = new ArrayList<>();
 
     private RandomAccessible<V> m_decoratee;
 
-    private final int m_columnToFilter;
+    private int m_decorateeSize;
 
-    /**
-     * Constructor.
-     *
-     * @param columnToFilter the index of the column to filter out (indices start at 0)
-     */
-    ColumnFilterRandomAccessible(final int columnToFilter) {
-        m_columnToFilter = columnToFilter;
-    }
-
-    void setDecoratee(final RandomAccessible<V> decoratee) {
+    public void setDecoratee(final RandomAccessible<V> decoratee) {
+        assert decoratee != null : "decoratees must not be null.";
         m_decoratee = decoratee;
+        m_cachedIdxs.clear();
+        m_decorateeSize = decoratee.size();
+        m_cache.ensureCapacity(m_decorateeSize);
+        // ensure that we can cache the values without running out of bounds
+        for (int i = m_cache.size(); i < m_decorateeSize; i++) {
+            m_cache.add(null);
+        }
     }
 
     @Override
     public int size() {
-        final int underlyingSize = m_decoratee.size();
-        return underlyingSize > m_columnToFilter ? underlyingSize - 1 : underlyingSize;
+        assert m_decoratee != null : "No decoratee set.";
+        return m_decorateeSize;
     }
 
     @Override
     public V get(final int idx) {
-        final int filteredIdx = idx < m_columnToFilter ? idx : idx + 1;
-        return m_decoratee.get(filteredIdx);
+        assert m_decoratee != null : "No decoratee set.";
+        if (m_cachedIdxs.contains(idx)) {
+            return m_cache.get(idx);
+        } else {
+            m_cachedIdxs.add(idx);
+            final V value = m_decoratee.get(idx);
+            // the setDecoratee method ensures that we don't run out of bounds
+            m_cache.set(idx, value);
+            return value;
+        }
     }
 
 }

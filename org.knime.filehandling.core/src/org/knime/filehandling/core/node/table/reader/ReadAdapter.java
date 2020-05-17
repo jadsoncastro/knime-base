@@ -51,7 +51,7 @@ package org.knime.filehandling.core.node.table.reader;
 import org.knime.core.data.convert.map.MappingFramework;
 import org.knime.core.data.convert.map.ProducerRegistry;
 import org.knime.core.data.convert.map.Source;
-import org.knime.core.node.util.CheckUtils;
+import org.knime.filehandling.core.node.table.reader.randomaccess.CachingRandomAccessible;
 import org.knime.filehandling.core.node.table.reader.randomaccess.RandomAccessible;
 import org.knime.filehandling.core.node.table.reader.read.Read;
 
@@ -75,7 +75,12 @@ import org.knime.filehandling.core.node.table.reader.read.Read;
  */
 public abstract class ReadAdapter<T, V> implements Source<T> {
 
+    // TODO we know the size of the random accessibles, so we could use a static cache
+    private final CachingRandomAccessible<V> m_cache = new CachingRandomAccessible<>();
+
     private RandomAccessible<V> m_current;
+
+    private Object[] m_cacheArray;
 
     /**
      * Constructor to be called by extending classes.
@@ -90,7 +95,15 @@ public abstract class ReadAdapter<T, V> implements Source<T> {
      * @param current
      */
     public void setSource(final RandomAccessible<V> current) {
+//        m_cache.setDecoratee(current);
         m_current = current;
+        if (m_cacheArray == null || m_cacheArray.length < current.size()) {
+            m_cacheArray = new Object[current.size()];
+        }
+        for (int i = 0; i < m_cacheArray.length; i++) {
+            m_cacheArray[i] = current.get(i);
+        }
+
     }
 
     /**
@@ -101,8 +114,9 @@ public abstract class ReadAdapter<T, V> implements Source<T> {
      * @return the value identified by params
      */
     public final V get(final ReadAdapterParams<?> params) {
-        CheckUtils.checkState(m_current != null, "Coding error: No row set.");
-        return m_current.get(params.getIdx());
+//        return m_cache.get(params.getIdx());
+//        return m_current.get(params.getIdx());
+        return (V)m_cacheArray[params.getIdx()];
     }
 
     /**

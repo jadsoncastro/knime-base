@@ -94,7 +94,8 @@ public final class DefaultIndexMapper implements IndexMapper {
     @Override
     public int map(final int idx) {
         final int mapped = m_mapping[idx];
-        CheckUtils.checkArgument(mapped >= 0, "There is no mapping for index %s.", idx);
+        // TODO discuss if this is worth the risk of going unchecked. A wrong mapping will cause strange ouputs that are hard to debug
+        assert mapped >= 0 : "There is no mapping for index " + idx;
         return mapped;
     }
 
