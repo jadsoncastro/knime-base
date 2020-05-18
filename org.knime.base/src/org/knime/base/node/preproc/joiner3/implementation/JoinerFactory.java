@@ -64,7 +64,9 @@ public interface JoinerFactory {
 
     public enum JoinAlgorithm {
         NESTED_LOOP("Nested Loop Join", NestedLoopJoin::new),
-        HASH("Hash Join", HashJoin::new),
+        HASH("In Memory Hash Join", HashJoin::new),
+        HYBRID_HASH("Hybrid Hash Join", HybridHashJoin::new),
+//        LEGACY("Hybrid Hash Join (Legacy)", Legacy::new),
         AUTO("Automatic", CostModelFactory::create);
 
         private final String m_text;

@@ -102,7 +102,7 @@ class InputRow implements Comparable<InputRow> {
      *
      * @return the JoinTuples of this row.
      */
-    DataCell[][] getJoinTuples() {
+    JoinTuple[] getJoinTuples() {
         List<Integer> indices = null;
         indices = m_settings.getJoiningIndices(m_port);
         if (!m_settings.getMatchAny()) {
@@ -118,10 +118,10 @@ class InputRow implements Comparable<InputRow> {
                     cells[i] = new StringCell(m_row.getKey().getString());
                 }
             }
-            return new DataCell[][] {cells};
+            return new JoinTuple[] {new JoinTuple(cells)};
         } else {
             int numJoinAttributes = indices.size();
-            DataCell[][] joinCells = new DataCell[numJoinAttributes][];
+            JoinTuple[] joinCells = new  JoinTuple[numJoinAttributes];
 
             for (int i = 0; i < numJoinAttributes; i++) {
                 int index = indices.get(i);
@@ -136,7 +136,7 @@ class InputRow implements Comparable<InputRow> {
                     // StringCell's
                     cells[i] = new StringCell(m_row.getKey().getString());
                 }
-                joinCells[i] = cells;
+                joinCells[i] = new JoinTuple(cells);
             }
             return joinCells;
         }

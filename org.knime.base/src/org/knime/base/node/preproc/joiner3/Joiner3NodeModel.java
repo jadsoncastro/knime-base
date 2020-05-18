@@ -61,6 +61,7 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeLogger;
 import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettings;
 import org.knime.core.node.NodeSettingsRO;
@@ -120,12 +121,20 @@ public class Joiner3NodeModel extends NodeModel {
         return new DataTableSpec[]{Joiner.createOutputSpec(m_settings, this::setWarningMessage, inSpecs)};
     }
 
+    private static final NodeLogger LOGGER = NodeLogger.getLogger(Joiner3NodeModel.class);
+
     /**
      * {@inheritDoc}
      */
     @Override
     protected BufferedDataTable[] execute(final BufferedDataTable[] inData, final ExecutionContext exec)
         throws Exception {
+
+        long before = System.currentTimeMillis();
+
+        // if present, provides an upper bound on the number of distinct values
+        // if not present, there could be too many values (more than 60 by default) or the column is continuous (e.g., double cell)
+//        inData[0].getSpec().getColumnSpec(0).getDomain().getValues().size();
 
         // warning and progress messages are directly fed to the execution context
         BufferedDataTable[] joinedTable = new BufferedDataTable[]{
@@ -134,8 +143,12 @@ public class Joiner3NodeModel extends NodeModel {
         // TODO hiliting
         //        m_leftMapper = new DefaultHiLiteMapper(m_leftRowKeyMap);
         //        m_rightMapper = new DefaultHiLiteMapper(m_rightRowKeyMap);
-        m_leftTranslator.setMapper(m_leftMapper);
-        m_rightTranslator.setMapper(m_rightMapper);
+//        m_leftTranslator.setMapper(m_leftMapper);
+//        m_rightTranslator.setMapper(m_rightMapper);
+
+        long after = System.currentTimeMillis();
+
+        LOGGER.info(String.format("%s rows ⨝ %s rows = %s rows (%sms)", inData[0].size(), inData[1].size(), joinedTable[0].size(), after - before));
 
         return joinedTable;
     }

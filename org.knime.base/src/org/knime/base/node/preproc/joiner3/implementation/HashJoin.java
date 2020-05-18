@@ -64,6 +64,7 @@ import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.DataType;
 import org.knime.core.data.RowKey;
+import org.knime.core.data.container.CloseableRowIterator;
 import org.knime.core.data.def.DefaultRow;
 import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
@@ -74,6 +75,7 @@ import org.knime.core.node.streamable.StreamableFunction;
 
 /**
  *
+ * TODO write docs.
  * This currently supports conjunctive (rows must match on every column pair) equijoins only.
  *
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
@@ -84,16 +86,7 @@ public class HashJoin extends JoinImplementation {
     private interface RowHandler extends BiConsumer<BufferedDataTable, DataRow> {
     }
 
-    private final static RowHandler IGNORE_ROW = (table, row) -> {
-    };
-
-    //    Map<Joiner3Settings.JoinMode, RowHandler> unmatchedHandlers = new HashMap<Joiner3Settings.JoinMode, RowHandler>(){{
-    //        // when performing an inner join, unmatched rows do not contribute to the output
-    //        put(Joiner3Settings.JoinMode.InnerJoin, IGNORE_ROW);
-    //        put(Joiner3Settings.JoinMode.LeftOuterJoin, HashJoin.this::handleUnmatchedInner);
-    //        put(Joiner3Settings.JoinMode.RightOuterJoin, HashJoin.this::handleUnmatchedInner);
-    //        put(Joiner3Settings.JoinMode.FullOuterJoin, HashJoin.this::handleUnmatchedInner);
-    //    }};
+    private final static RowHandler IGNORE_ROW = (table, row) -> { };
 
     private final Map<BufferedDataTable, List<DataRow>> m_unmatched = new HashMap<>();
 
@@ -217,35 +210,36 @@ public class HashJoin extends JoinImplementation {
 
         long rowIndex = 0;
 
-        // FIXME this leaves iterators open?
-        for (DataRow row : m_bigger) {
+        try (CloseableRowIterator bigger = m_bigger.iterator()) {
+            while (bigger.hasNext()) {
+                DataRow row = bigger.next();
 
-            exec.checkCanceled();
+                exec.checkCanceled();
 
-            JoinTuple query = biggerJoinAttributes.apply(row);
+                JoinTuple query = biggerJoinAttributes.apply(row);
 
-            List<DataRow> matches = index.get(query);
+                List<DataRow> matches = index.get(query);
 
-            if (matches == null) {
-                // this row from the bigger table has no matching row in the other table
-                // if we're performing an outer join, include the row in the result
-                // if we're performing an inner join, ignore the row
-                unmatched.accept(m_bigger, row);
-                continue;
+                if (matches == null) {
+                    // this row from the bigger table has no matching row in the other table
+                    // if we're performing an outer join, include the row in the result
+                    // if we're performing an inner join, ignore the row
+                    unmatched.accept(m_bigger, row);
+                    continue;
+                }
+
+                updateProgress(exec, m_bigger, rowIndex);
+
+                for (DataRow match : matches) {
+                    DataRow outer = getOuter(row, match);
+                    DataRow inner = getInner(row, match);
+
+                    RowKey newRowKey = concatRowKeys(outer, inner);
+                    result.addRowToTable(new JoinedRow(newRowKey, outer, inner));
+                }
+
+                rowIndex++;
             }
-
-            updateProgress(exec, m_bigger, rowIndex);
-
-            for (DataRow match : matches) {
-                DataRow outer = getOuter(row, match);
-                DataRow inner = getInner(row, match);
-
-                RowKey newRowKey = concatRowKeys(outer, inner);
-                result.addRowToTable(new JoinedRow(newRowKey, outer, inner));
-            }
-
-            rowIndex++;
-
         }
 
         // does something only for outer joins

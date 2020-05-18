@@ -327,9 +327,9 @@ public class Joiner {
      * @return
      */
     public StreamableFunction getStreamableFunction(final Joiner3Settings settings, final DataTableSpec[] inputSpecs) {
-        // the old spec vs table problem -- here we only have the specs. 
-        // downgrading the general interface seem weird, though -- need sizes to choose implementation? 
-        m_joinStrategy = settings.getJoinAlgorithm().getFactory().create(settings, inputSpecs);
+        // the old spec vs table problem -- here we only have the specs.
+        // downgrading the general interface seem weird, though -- need sizes to choose implementation?
+//        m_joinStrategy = settings.getJoinAlgorithm().getFactory().create(settings, inputSpecs);
         return m_joinStrategy.getStreamableFunction();
     }
 

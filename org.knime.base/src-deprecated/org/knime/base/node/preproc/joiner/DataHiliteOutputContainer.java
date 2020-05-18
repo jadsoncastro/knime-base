@@ -153,7 +153,10 @@ class DataHiliteOutputContainer {
         return m_rightRowKeyMap;
     }
 
-    /** Add the given row to m_dc. */
+    /**
+     * @param row contains the original row from the right table and the optionally the offset of a matching row from
+     *            the left table
+     **/
     private void addRow(final DataRow row) {
         // get left input row
         DataRow left = null;

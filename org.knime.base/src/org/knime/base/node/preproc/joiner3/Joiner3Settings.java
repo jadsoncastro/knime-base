@@ -96,6 +96,9 @@ public class Joiner3Settings {
 
     private static final String REMOVE_RIGHT_JOINING_COLUMNS = "rmRightJoinCols";
 
+    /**
+     * TODO this is currently not used, can be deleted
+     */
     private static final String MAX_OPEN_FILES = "maxOpenFiles";
 
     private static final String ROW_KEY_SEPARATOR = "rowKeySeparator";

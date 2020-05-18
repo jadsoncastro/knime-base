@@ -476,12 +476,10 @@ public final class Joiner {
                 leftTable.getDataTableSpec(),
                 rightTable.getDataTableSpec()});
 
-        if (m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.Filter)) {
-            List<String> leftCols = getLeftIncluded(
-                    leftTable.getDataTableSpec());
-            List<String> rightCols = getRightIncluded(
-                    rightTable.getDataTableSpec());
+        // eliminate duplicate columns if requested
+        if (m_settings.getDuplicateHandling().equals(DuplicateHandling.Filter)) {
+            List<String> leftCols = getLeftIncluded(leftTable.getDataTableSpec());
+            List<String> rightCols = getRightIncluded(rightTable.getDataTableSpec());
             List<String> duplicates = new ArrayList<String>();
             duplicates.addAll(leftCols);
             duplicates.retainAll(rightCols);
@@ -492,7 +490,6 @@ public final class Joiner {
         BufferedDataTable outerTable = rightTable;
         BufferedDataTable innerTable = leftTable;
 
-
         m_retainRight = JoinMode.RightOuterJoin.equals(m_settings.getJoinMode())
             || JoinMode.FullOuterJoin.equals(m_settings.getJoinMode());
         m_retainLeft = JoinMode.LeftOuterJoin.equals(m_settings.getJoinMode())
@@ -502,8 +499,7 @@ public final class Joiner {
         // once. This is in general met with the MatchAny Option but only if
         // there are more than one join column.
         m_matchAny = m_settings.getCompositionMode()
-            .equals(CompositionMode.MatchAny)
-            && m_settings.getLeftJoinColumns().length > 1;
+            .equals(CompositionMode.MatchAny) && m_settings.getLeftJoinColumns().length > 1;
 
         if (m_retainLeft && m_matchAny) {
             m_globalLeftOuterJoins = new HashSet<Integer>();
@@ -511,14 +507,11 @@ public final class Joiner {
                 m_globalLeftOuterJoins.add(i);
             }
         }
-
-
-        m_inputDataRowSettings = createInputDataRowSettings(leftTable,
-                rightTable);
+        // defines join column indices for left and right table; whether the predicate is conjunctive or disjunctive
+        m_inputDataRowSettings = createInputDataRowSettings(leftTable, rightTable);
         int[] rightSurvivors = getIndicesOf(rightTable, m_rightSurvivors);
-        m_outputDataRowSettings = new OutputRow.Settings(
-                rightTable.getDataTableSpec(),
-                rightSurvivors);
+        // defines right table survivor column indices; DatatTableSpec m_spec
+        m_outputDataRowSettings = new OutputRow.Settings(rightTable.getDataTableSpec(), rightSurvivors);
 
         /* numBits -> numPartitions
          * 0 -> 1
@@ -531,9 +524,13 @@ public final class Joiner {
          * 7 -> 128
          */
         m_numBits = m_numBitsInitial;
+        // numPartitions = 2ˆm_numBits
         int numPartitions = 0x0001 << m_numBits;
         m_bitMask = 0;
+        // m_bitMask = 2ˆ(numBits)-1
+        // e.g., for 3 bits, 0b111
         for (int i = 0; i < m_numBits; i++) {
+            // 2ˆi
             m_bitMask += 0x0001 << i;
         }
 
@@ -618,7 +615,11 @@ public final class Joiner {
         return oc.getTable();
     }
 
-    /** This method start with reading the partitions of the left table defined
+    /**
+     * Builds an index of the left table. If memory is scarce, indexes only some partitions of the table, where all
+     * rows with the same JoinTuple (combination of values in the join columns) go into the same partition.
+     *
+     * This method start with reading the partitions of the left table defined
      * in currParts. If memory is low, partitions will be skipped or the
      * number of partitions will be raised which leads to smaller partitions.
      * Successfully read partitions will be joined. The return collection
@@ -677,6 +678,7 @@ public final class Joiner {
                         m_inputDataRowSettings);
 
                 for (JoinTuple tuple : inputDataRow.getJoinTuples()) {
+                    // partition = hashcode % number of partitions
                     int partition = tuple.hashCode() & m_bitMask;
                     if (currParts.contains(partition)) {
                         addRow(leftTableHashed, leftOuterJoins,
@@ -980,7 +982,10 @@ public final class Joiner {
                     // add left outer join
                     DataRow outRow = OutputRow.createDataRow(
                             outputCont.getRowCount(),
-                            row, -1,
+                            // left row index
+                            row,
+                            // right row index doesn't apply to left outer join
+                            -1,
                             m_outputDataRowSettings);
                     outputCont.addLeftOuter(outRow, exec);
                 }

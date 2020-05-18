@@ -75,6 +75,7 @@ public class NestedLoopJoin extends JoinImplementation {
      * @param leftTableSpec
      * @param rightTableSpec
      * @param settings
+     * @throws InvalidSettingsException
      */
     public NestedLoopJoin(final Joiner3Settings settings, final BufferedDataTable... tables) {
         // FIXME

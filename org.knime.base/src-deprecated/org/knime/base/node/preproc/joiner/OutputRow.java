@@ -77,8 +77,11 @@ final class OutputRow {
     }
 
     /**
-     * Create a {@link DataRow} that stores information of a inner or
-     * outer joins.
+     * Create an row that copies the values from `rightDataRow` and adds three columns:
+     * - the row key of `rightDataRow` as String
+     * - the offset of the matching row in the left table (or -1 if right outer join)
+     * - the offset of the matching row in the right table (never -1,
+     * see {@link #createDataRow(long, long, long, Settings)} for left outer join)
      *
      * @param index The index of this row.
      * @param leftIndex The index of the left row.
