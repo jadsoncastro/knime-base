@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataRow;

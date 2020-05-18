@@ -50,6 +50,7 @@ package org.knime.base.node.preproc.joiner3.implementation;
 
 import org.knime.base.data.join.JoinedTable;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.BufferedDataContainer;

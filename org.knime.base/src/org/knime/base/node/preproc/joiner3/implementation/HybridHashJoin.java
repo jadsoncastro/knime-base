@@ -48,14 +48,24 @@
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.RowKey;
 import org.knime.core.data.container.CloseableRowIterator;
@@ -67,6 +77,7 @@ import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.NodeProgressMonitor;
 import org.knime.core.node.streamable.StreamableFunction;
 
 /**
@@ -126,7 +137,7 @@ public class HybridHashJoin extends JoinImplementation {
         // The row partitions of the hash input. Try to keep in memory, but put on disk if needed.
         // hashBucketsInMemory[i] == null indicates that the bucket is on disk.
         InMemoryBucket[] hashBucketsInMemory =
-            Stream.generate(() -> new InMemoryBucket()).limit(numBuckets).toArray(InMemoryBucket[]::new);
+            Stream.generate(() -> new InMemoryBucket(hashInput)).limit(numBuckets).toArray(InMemoryBucket[]::new);
 
         // the buckets of the hash input are kept in memory for offsets firstInMemoryBucket...numBuckets-1
         // the offsets 0...firstInMemoryBucket-1 are stored on disk.
@@ -139,23 +150,35 @@ public class HybridHashJoin extends JoinImplementation {
         // Row partitions of the probe input. A bucket r is only used if the corresponding hash input bucket s can
         // not be held in main memory. The bucket pair (r, s) is then retrieved from disk later and joined in memory.
         DiskBucket[] probeBuckets =
-            Stream.generate(() -> new DiskBucket()).limit(numBuckets).toArray(DiskBucket[]::new);
+            Stream.generate(() -> new DiskBucket(probeInput)).limit(numBuckets).toArray(DiskBucket[]::new);
+
+        NodeProgressMonitor progress = exec.getProgressMonitor();
 
         MemoryActionIndicator softWarning = MemoryAlertSystem.getInstanceUncollected().newIndicator();
 
         { // phase 1: partition the hash input into buckets, keep as many buckets as possible in memory
+
+            progress.setMessage("Processing smaller table");
+            progress.setProgress(0);
+
             try (CloseableRowIterator hashRows = hashInput.iterator()) {
 
                 while (hashRows.hasNext()) {
 
                     exec.checkCanceled();
+                    progress.setProgress(progress.getProgress() + 0.33/hashInput.size());
 
                     // if memory is running low and there are hash buckets in-memory
-                    if (softWarning.lowMemoryActionRequired() && firstInMemoryBucket < numBuckets) {
+                    // TODO check memory again only after N rows
+                    // or check only every 100 rows or so.
+                    boolean someBucketsAreInMemory = firstInMemoryBucket < numBuckets;
+                    if (softWarning.lowMemoryActionRequired() && someBucketsAreInMemory) {
                         // migrate the next in-memory hash bucket to disk
                         // convert to disk bucket, release heap memory
-                        hashBucketsOnDisk[firstInMemoryBucket] = hashBucketsInMemory[firstInMemoryBucket].toDisk();
+                        hashBucketsOnDisk[firstInMemoryBucket] = hashBucketsInMemory[firstInMemoryBucket].toDisk(exec);
                         firstInMemoryBucket++;
+                        m_bean.numHashPartitionsOnDisk = firstInMemoryBucket;
+                        LOGGER.warn(String.format("Running out of memory. Migrating bucket %s/%s to disk", firstInMemoryBucket, numBuckets));
                     }
 
                     DataRow hashRow = hashRows.next();
@@ -167,7 +190,7 @@ public class HybridHashJoin extends JoinImplementation {
                         hashBucketsInMemory[bucket].add(joinAttributeValues, hashRow, true);
                     } else {
                         // if the bucket is on disk store for joining later
-                        hashBucketsOnDisk[bucket].add(joinAttributeValues, hashRow);
+                        hashBucketsOnDisk[bucket].add(hashRow, exec);
                     }
 
                 }
@@ -178,6 +201,8 @@ public class HybridHashJoin extends JoinImplementation {
 
         { // phase 2: partitioning and probing of the probe input
 
+            progress.setMessage("Processing larger table");
+
             // process probe input: process rows immediately for which the matching bucket is in memory;
             // otherwise put the row into a disk bucket
             try (CloseableRowIterator iterator = probeInput.iterator()) {
@@ -185,6 +210,7 @@ public class HybridHashJoin extends JoinImplementation {
                 while (iterator.hasNext()) {
 
                     exec.checkCanceled();
+                    progress.setProgress(progress.getProgress() + 0.33/probeInput.size());
 
                     DataRow probeRow = iterator.next();
                     JoinTuple joinAttributeValues = getJoinTuple(probeInput, probeRow);
@@ -195,17 +221,28 @@ public class HybridHashJoin extends JoinImplementation {
                         hashBucketsInMemory[bucket].joinSingleRow(joinAttributeValues, probeRow, resultContainer);
                     } else {
                         // if hash bucket is on disk, process this row later, when joining the matching buckets
-                        probeBuckets[bucket].add(joinAttributeValues, probeRow);
+                        probeBuckets[bucket].add(probeRow, exec);
                     }
                 }
             }
+
+            // partitioning is done; containers can be closed and converted to BufferedDataTables
+            Arrays.stream(hashBucketsOnDisk).filter(Objects::nonNull).forEach(DiskBucket::close);
+            Arrays.stream(probeBuckets).forEach(DiskBucket::close);
+
         }
 
         { // phase 3: joining the rows that went to disk because not enough memory was available
 
+            progress.setMessage("Processing data on disk");
             // join only the pairs of buckets that haven't been processed in memory
             for (int i = 0; i < firstInMemoryBucket; i++) {
+
+                exec.checkCanceled();
+                progress.setProgress(progress.getProgress() + 0.33/firstInMemoryBucket);
+
                 probeBuckets[i].join(hashBucketsOnDisk[i], resultContainer, exec);
+
             }
 
         }
@@ -216,42 +253,115 @@ public class HybridHashJoin extends JoinImplementation {
     }
 
 
-    class DiskBucket  {
+    class DiskBucket {
         BufferedDataTable rows;
 
-        public void add(final JoinTuple joinAttributes, final DataRow row) {
+        // TODO this should only write the columns to disk that are used not projected out in the end
+        BufferedDataContainer m_container;
 
+        final BufferedDataTable m_forTable;
 
+        // stores a part of m_forTable on disk.
+        BufferedDataTable m_tablePartition;
+
+        DiskBucket(final BufferedDataTable forTable) {
+            m_forTable = forTable;
         }
 
-        public void join(final DiskBucket other, final DataContainer resultContainer, final ExecutionContext exec){
+        void add(final DataRow row, final ExecutionContext exec) {
+            // lazy initialization of the data container, only when rows are actually added
+            if (m_container == null) {
+                m_container = exec.createDataContainer(m_forTable.getDataTableSpec());
+            }
+            m_container.addRowToTable(row);
+        }
+
+        void join(final DiskBucket other, final DataContainer resultContainer, final ExecutionContext exec) {
             // use nested loop if doesn't fit in-memory
             // read and index otherwise
+            // TODO refactor
+//           NestedHashJoin.join(m_settings, m_tablePartition, other.m_tablePartition, resultContainer);
+
+            BufferedDataTable leftPartition = m_tablePartition;
+            BufferedDataTable rightPartition = other.m_tablePartition;
+
+            // build index
+            Extractor joinAttributeExtractorHash = row -> getJoinTuple(other.m_forTable, row);
+
+            // TODO close this iterator?
+            Map<JoinTuple, List<DataRow>> index = StreamSupport.stream(rightPartition.spliterator(), false).collect(Collectors.groupingBy(joinAttributeExtractorHash));
+
+            try (CloseableRowIterator probeRows = leftPartition.iterator()) {
+
+                while (probeRows.hasNext()) {
+
+                    exec.checkCanceled();
+
+                    DataRow probeRow = probeRows.next();
+                    JoinTuple probeTuple = getJoinTuple(m_forTable, probeRow);
+
+                    List<DataRow> matches = index.get(probeTuple);
+
+                    if (matches == null) {
+                        // this row from the bigger table has no matching row in the other table
+                        // if we're performing an outer join, include the row in the result
+                        // if we're performing an inner join, ignore the row
+                        //                unmatched.accept(m_bigger, row);
+                        continue;
+                    } else {
+                        for (DataRow hashRow : matches) {
+                            DataRow outer = getOuter(probeRow, hashRow);
+                            DataRow inner = getInner(probeRow, hashRow);
+
+                            RowKey newRowKey = concatRowKeys(outer, inner);
+                            resultContainer.addRowToTable(new JoinedRow(newRowKey, outer, inner));
+                        }
+                    }
+
+                }
+            } catch (CanceledExecutionException e) {
+
+            }
+
         }
+
+        void close() {
+            if(m_container != null) {
+                m_container.close();
+                m_tablePartition = m_container.getTable();
+            }
+        }
+
     }
 
     class InMemoryBucket {
 
+        final BufferedDataTable m_forTable;
+
         // these two lists store the keys and data rows paired. (don't want to create jointuple objects again; don't want to create Pair objects to hold jointuple and datarow together;         // - maybe this is premature optimization, I don't know
         // m_joinAttributes(i) stores the jointuple for m_rows(i), always retrieve both together
-        final List<JoinTuple> m_joinAttributes = new ArrayList<>();
-        final List<DataRow> m_rows = new ArrayList<>();
+        List<JoinTuple> m_joinAttributes = new ArrayList<>();
 
-        final HashMap<JoinTuple, List<DataRow>> m_index = new HashMap<>();
+        List<DataRow> m_rows = new ArrayList<>();
+
+        HashMap<JoinTuple, List<DataRow>> m_index = new HashMap<>();
+
+        InMemoryBucket(final BufferedDataTable forTable) {
+            m_forTable = forTable;
+        }
 
         public void add(final JoinTuple joinAttributes, final DataRow row, final boolean index) {
             if (!index) {
                 m_joinAttributes.add(joinAttributes);
                 m_rows.add(row);
             } else {
-                m_index
-                    .computeIfAbsent(joinAttributes, k -> new LinkedList<DataRow>())
-                    .add(row);
+                m_index.computeIfAbsent(joinAttributes, k -> new LinkedList<DataRow>()).add(row);
             }
 
         }
 
-        public void joinSingleRow(final JoinTuple joinAttributeValues, final DataRow probeRow, final BufferedDataContainer resultContainer) {
+        public void joinSingleRow(final JoinTuple joinAttributeValues, final DataRow probeRow,
+            final BufferedDataContainer resultContainer) {
 
             List<DataRow> matches = m_index.get(joinAttributeValues);
 
@@ -259,7 +369,7 @@ public class HybridHashJoin extends JoinImplementation {
                 // this row from the bigger table has no matching row in the other table
                 // if we're performing an outer join, include the row in the result
                 // if we're performing an inner join, ignore the row
-//                unmatched.accept(m_bigger, row);
+                //                unmatched.accept(m_bigger, row);
             } else {
                 for (DataRow hashRow : matches) {
                     DataRow outer = getOuter(probeRow, hashRow);
@@ -271,159 +381,66 @@ public class HybridHashJoin extends JoinImplementation {
             }
         }
 
-//        public List<DataRow> joinMaterialize(final InMemoryBucket other) {
-//            Iterator<JoinTuple> keyIterator = m_joinAttributes.iterator();
-//
-//            List<DataRow> result = new ArrayList<DataRow>(m_rows.size());
-//
-//            for (DataRow probeRow : m_rows) {
-//
-//                JoinTuple query = keyIterator.next();
-//
-//                joinSingleRow(query, probeRow, resultContainer);
-//
-//
-//            }
-//            return result;
-//        }
+        public void join(final InMemoryBucket other, final DataContainer resultContainer, final ExecutionContext exec)
+            throws CanceledExecutionException {
 
-        public void join(final InMemoryBucket other, final DataContainer resultContainer, final ExecutionContext exec) throws CanceledExecutionException {
-
-//            try (CloseableRowIterator bigger = m_bigger.iterator()) {
+            //            try (CloseableRowIterator bigger = m_bigger.iterator()) {
 
             Iterator<JoinTuple> keyIterator = m_joinAttributes.iterator();
 
-            for(DataRow probeRow : m_rows) {
+            for (DataRow probeRow : m_rows) {
 
-                    exec.checkCanceled();
+                exec.checkCanceled();
 
-                    JoinTuple query = keyIterator.next();
+                JoinTuple query = keyIterator.next();
 
-                    List<DataRow> matches = other.m_index.get(query);
+                List<DataRow> matches = other.m_index.get(query);
 
-                    if (matches == null) {
-                        // this row from the bigger table has no matching row in the other table
-                        // if we're performing an outer join, include the row in the result
-                        // if we're performing an inner join, ignore the row
-//                        unmatched.accept(m_bigger, row);
-                        continue;
-                    }
-
-//                    updateProgress(exec, m_bigger, rowIndex);
-
-                    for (DataRow hashRow : matches) {
-                        DataRow outer = getOuter(probeRow, hashRow);
-                        DataRow inner = getInner(probeRow, hashRow);
-
-                        RowKey newRowKey = concatRowKeys(outer, inner);
-                        resultContainer.addRowToTable(new JoinedRow(newRowKey, outer, inner));
-                    }
-
-//                    rowIndex++;
+                if (matches == null) {
+                    // this row from the bigger table has no matching row in the other table
+                    // if we're performing an outer join, include the row in the result
+                    // if we're performing an inner join, ignore the row
+                    //                        unmatched.accept(m_bigger, row);
+                    continue;
                 }
-            }
 
-            DiskBucket toDisk() {
-                //FIXME
-                m_rows.clear();
-                m_joinAttributes.clear();
-                return null;
-            }
+                //                    updateProgress(exec, m_bigger, rowIndex);
 
+                for (DataRow hashRow : matches) {
+                    DataRow outer = getOuter(probeRow, hashRow);
+                    DataRow inner = getInner(probeRow, hashRow);
+
+                    RowKey newRowKey = concatRowKeys(outer, inner);
+                    resultContainer.addRowToTable(new JoinedRow(newRowKey, outer, inner));
+                }
+
+                //                    rowIndex++;
+            }
         }
 
+        DiskBucket toDisk(final ExecutionContext exec) {
 
-    // is a closeable row iterator really the best solution?
-    // we're assuming the stuff fits in memory right?
-    // not sure about that...
-    // it's pretty clear that going full iterator will bring some overhead...
-    // for instance, if every row has two join partners, creating an iterator for two elements seems costly
-    // and doesn't really save memory, right?
-    // maybe add some threshold for iteration and materialization?
-    // is this, again premature optimization?
-    // another disadvantage of the full iterator approach is that we have to maintain a lot of state.
-//            return new CloseableRowIterator() {
-//
-////                private Iterator<Entry<JoinTuple, List<DataRow>>> m_indexEntries = rows.entrySet().iterator();
-//
-//                // they go paired
-//                private Iterator<DataRow> rowIterator = m_rows.iterator();
-//                private Iterator<JoinTuple> keyIterator = m_joinAttributes.iterator();
-//                private Iterator<DataRow> matchIterator;
-//
-//                // whether we're in the middle of iterating a row's matches in the index
-//                //
-//                private boolean midStream = false;
-//
-//                private Iterator<DataRow> matchIteator;
-//
-//                @Override
-//                public DataRow next() {
-//
-//                    // all matches of the previous row have been processed
-//                    // advance the probe input iterator
-//                    if (!midStream) {
-//                        JoinTuple nextKey = keyIterator.next();
-//                        DataRow nextRow = rowIterator.next();
-//                        List<DataRow> matches = m_index.get(nextKey);
-//
-//                        if (matches == null) {
-//                            // this row from the bigger table has no matching row in the other table
-//                            // if we're performing an outer join, include the row in the result
-//                            // if we're performing an inner join, ignore the row
-//                            //                        unmatched.accept(m_bigger, row);
-//                            continue;
-//                        }
-//
-//                    } else {
-//                        DataRow nextMatch = matchIterator.next();
-//                    }
-//
-//                    //                    Entry<JoinTuple, List<DataRow>> next = m_indexEntries.next();
-//                    // if there is only one row with the given join attributes, return the next of its join partners
-//
-//
-//
-//                    for (DataRow match : matches) {
-//                        DataRow outer = getOuter(row, match);
-//                        DataRow inner = getInner(row, match);
-//
-//                        RowKey newRowKey = concatRowKeys(outer, inner);
-//                        result.addRowToTable(new JoinedRow(newRowKey, outer, inner));
-//                    }
-//
-//                }
-//
-//                @Override
-//                public boolean hasNext() {
-//                    return rowIterator.hasNext();
-//                }
-//
-//                @Override
-//                public void close() {
-//                }
-//            };
+            // release memory
+            m_joinAttributes = null;
+            m_index = null;
 
+            DiskBucket result = new DiskBucket(m_forTable);
 
-    // helper methods like in AbstractTableSorter to open and close tables for iteration?
-    //Iterator<DataRow>
-//    Map<BufferedDataTable, CloseableRowIterator> iterators = new HashMap<>();
-//    private CloseableRowIterator open(final BufferedDataTable table) {
-//        if(iterators.containsKey(table)) {
-//            throw new IllegalStateException(String.format("Can not open table %s again.", table));
-//        }
-//        CloseableRowIterator iterator = table.iterator();
-//        iterators.put(table, iterator);
-//        return iterator;
-//
-//    }
-//    private void close(final BufferedDataTable table) {
-//        CloseableRowIterator iterator = iterators.remove(table);
-//        if(iterator == null) {
-//            throw new IllegalStateException(String.format("Can not close table %s, it has not been opened.", table));
-//        }
-//        iterator.close();
-//    }
+            for (Iterator<DataRow> iterator = m_rows.iterator(); iterator.hasNext();) {
+
+                DataRow row = iterator.next();
+                result.add(row, exec);
+                // free memory from the in-memory data structure
+                iterator.remove();
+            }
+
+            // release memory
+            m_rows = null;
+
+            return result;
+        }
+
+    }
 
     /**
      * {@inheritDoc}
@@ -434,5 +451,55 @@ public class HybridHashJoin extends JoinImplementation {
         return null;
     }
 
+    @javax.management.MXBean
+    public interface IHybridHashJoinMBean {
+
+//        void setNumBits(int numBits);
+        int getNumPartitionsOnDisk();
+
+        void fillHeap(float targetPercentage);
+
+        void releaseTestAllocations();
+    }
+
+
+
+    final HybridHashJoinMBean m_bean = new HybridHashJoinMBean();
+    {
+        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+        try {
+            ObjectName name = new ObjectName("org.knime.base.node.preproc.joiner3.jmx:type=HybridHashJoin");
+            server.registerMBean(m_bean, name);
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+    public class HybridHashJoinMBean implements IHybridHashJoinMBean {
+
+        int numHashPartitionsOnDisk;
+        List<double[]> memoryConsumer = new LinkedList<>();
+        MemoryAlertSystem memoryAlertSystem = MemoryAlertSystem.getInstance();
+
+        @Override
+        public int getNumPartitionsOnDisk() {
+            return numHashPartitionsOnDisk;
+        }
+
+        @Override
+        public void fillHeap(final float targetPercentage) {
+
+            while(MemoryAlertSystem.getUsage() < targetPercentage) {
+                // allocate 50 MB
+                memoryConsumer.add(new double[6_250_000]);
+            }
+        }
+
+        @Override
+        public void releaseTestAllocations() {
+            memoryConsumer.clear();
+        }
+
+    }
 
 }

@@ -62,6 +62,7 @@ import java.util.function.Function;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpec;
@@ -99,12 +100,6 @@ public abstract class JoinImplementation {
      * This can change and the auxiliary data structures should be updated accordingly.
      */
     protected Joiner3Settings m_settings;
-
-    /**
-     * Defines a mapping from a row in a table to a representation of the values of its join columns.
-     * Useful for an equijoin where the extracted representation has to be tested with equals()
-     */
-    protected interface Extractor extends Function<DataRow, JoinTuple> {}
 
     /**
      *

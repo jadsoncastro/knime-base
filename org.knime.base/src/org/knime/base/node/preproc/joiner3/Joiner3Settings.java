@@ -56,9 +56,11 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.knime.base.node.preproc.joiner3.implementation.JoinTuple;
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory;
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory.JoinAlgorithm;
 import org.knime.core.data.DataColumnSpec;
+import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
@@ -71,6 +73,12 @@ import org.knime.core.node.util.ConvenienceMethods;
  * @author Heiko Hofer
  */
 public class Joiner3Settings {
+
+    /**
+     * Defines a mapping from a row in a table to a representation of the values of its join columns.
+     * Useful for an equijoin where the extracted representation has to be tested with equals()
+     */
+    public interface Extractor extends Function<DataRow, JoinTuple> {}
 
     private static final String COPOSITION_MODE = "compositionMode";
 
@@ -228,6 +236,7 @@ public class Joiner3Settings {
     private boolean m_enableHiLite = false;
 
     private String m_version = VERSION_3;
+
 
     public void validateSettings() throws InvalidSettingsException {
         if (getDuplicateHandling() == null) {

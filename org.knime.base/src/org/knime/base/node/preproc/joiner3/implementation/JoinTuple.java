@@ -56,7 +56,7 @@ import org.knime.core.data.DataCell;
  *
  * @author Heiko Hofer
  */
-class JoinTuple {
+public class JoinTuple {
     /** The cells in the tuple. */
     private DataCell[] m_cells;
 
