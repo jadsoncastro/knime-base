@@ -135,8 +135,8 @@ public class NestedLoopJoin extends JoinImplementation {
                 exec.checkCanceled();
 
                 if (smallerJoinAttributes.apply(smaller).equals(biggerJoinAttributes.apply(bigger))) {
-                    DataRow outer = getOuter(bigger, smaller);
-                    DataRow inner = getInner(bigger, smaller);
+                    DataRow outer = getLeft(bigger, smaller);
+                    DataRow inner = getRight(bigger, smaller);
                     JoinedRow outputRow = new JoinedRow(outer, inner);
                     result.addRowToTable(outputRow);
                 }

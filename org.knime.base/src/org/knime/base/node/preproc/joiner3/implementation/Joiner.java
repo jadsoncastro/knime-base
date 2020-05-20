@@ -49,12 +49,12 @@
 package org.knime.base.node.preproc.joiner3.implementation;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataTableSpec;
@@ -68,7 +68,6 @@ import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.streamable.StreamableFunction;
-import org.knime.core.util.UniqueNameGenerator;
 
 /**
  *
@@ -85,99 +84,45 @@ public class Joiner {
      */
     JoinImplementation m_joinStrategy;
 
-//    // TODO legacy
-//    List<String> m_leftSurvivors;
-//    // TODO legacy
-//    List<String> m_rightSurvivors;
-
     public Joiner() {
 
     }
 
     /**
-     * @param settings
+     * @param settings need to be valid
      * @param warningMessageHandler a consumer that accepts warnings created during configuration.
      * @param specs
      * @param inSpecs
      * @return
-     * @throws InvalidSettingsException
      */
     public static DataTableSpec createOutputSpec(final Joiner3Settings settings,
-        final Consumer<String> warningMessageHandler, final DataTableSpec... specs) throws InvalidSettingsException {
+        final Consumer<String> warningMessageHandler, final DataTableSpec... specs) {
 
-            settings.validateSettings();
+        // look up the data column specifications in the left table by their name
+        DataTableSpec leftSpec = specs[0];
+        Stream<DataColumnSpec> leftColumnSpecs = Arrays.stream(settings.getLeftIncludeCols()).map(name -> leftSpec.getColumnSpec(name));
 
+        // look up the right data column specifications by name, change names if they clash with column name from left table
+        DataTableSpec rightSpec = specs[1];
+        List<DataColumnSpec> rightColSpecs = new ArrayList<>();
 
-            // concatenate all columns into one long new specification
-            // e.g., (age, income, height) ⨝ (age, education, sex, income) ->
-            //  (age, income, height, age, education, sex, income)
-
-//            DataColumnSpec[] concatenated =
-//                Arrays.stream(specs).flatMap(DataTableSpec::stream).toArray(DataColumnSpec[]::new);
-
-//            return new DataTableSpec(concatenated);
-
-            List<String> leftCols = settings.getLeftIncluded(specs[0]);
-            List<String> rightCols = settings.getRightIncluded(specs[1]);
-
-            // check if data types of joining columns do match
-            // throw InvalidSettingsException otherwise
-            checkJoinColumnTypeCompatibility(settings, specs);
-            // remove left columns from right columns if filter duplicates is active
-            duplicateHandling(settings, warningMessageHandler, leftCols, rightCols, specs);
-
-            @SuppressWarnings("unchecked")
-            UniqueNameGenerator nameGen = new UniqueNameGenerator(Collections.EMPTY_SET);
-            List<String> m_leftSurvivors = new ArrayList<String>();
-
-            List<DataColumnSpec> outColSpecs = new ArrayList<DataColumnSpec>();
-            for (int i = 0; i < specs[0].getNumColumns(); i++) {
-                DataColumnSpec columnSpec = specs[0].getColumnSpec(i);
-                if (leftCols.contains(columnSpec.getName())) {
-                    outColSpecs.add(columnSpec);
-                    nameGen.newName(columnSpec.getName());
-                    m_leftSurvivors.add(columnSpec.getName());
-                }
+        // look up column specs for names and change column names to getRightTargetColumnNames
+        for (int i = 0; i < settings.getRightIncludeCols().length; i++) {
+            String name = settings.getRightIncludeCols()[i];
+            DataColumnSpecCreator a = new DataColumnSpecCreator(rightSpec.getColumnSpec(name));
+            // make unique against column names that are already taken by the left table
+            if(leftSpec.containsName(name)) {
+                // change name to disambiguate, e.g., append a suffix
+                a.setName(settings.transformName(rightSpec, name));
             }
-
-            List<String> m_rightSurvivors = new ArrayList<String>();
-            for (int i = 0; i < specs[1].getNumColumns(); i++) {
-                DataColumnSpec columnSpec = specs[1].getColumnSpec(i);
-                if (rightCols.contains(columnSpec.getName())) {
-                    if (settings.getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)) {
-                        if (m_leftSurvivors.contains(columnSpec.getName())
-                            || m_rightSurvivors.contains(columnSpec.getName())) {
-                            String newName = columnSpec.getName();
-                            do {
-                                newName += settings.getDuplicateColumnSuffix();
-                            } while (m_leftSurvivors.contains(newName) || m_rightSurvivors.contains(newName));
-
-                            DataColumnSpecCreator dcsc = new DataColumnSpecCreator(columnSpec);
-                            dcsc.removeAllHandlers();
-                            dcsc.setName(newName);
-                            outColSpecs.add(dcsc.createSpec());
-                            rightCols.add(newName);
-                        } else {
-                            outColSpecs.add(columnSpec);
-                        }
-                    } else {
-                        String newName = nameGen.newName(columnSpec.getName());
-                        if (newName.equals(columnSpec.getName())) {
-                            outColSpecs.add(columnSpec);
-                        } else {
-                            DataColumnSpecCreator dcsc = new DataColumnSpecCreator(columnSpec);
-                            dcsc.removeAllHandlers();
-                            dcsc.setName(newName);
-                            outColSpecs.add(dcsc.createSpec());
-                        }
-
-                    }
-                    m_rightSurvivors.add(columnSpec.getName());
-                }
-            }
-
-            return new DataTableSpec(outColSpecs.toArray(new DataColumnSpec[outColSpecs.size()]));
+            a.removeAllHandlers();
+            rightColSpecs.add(a.createSpec());
         }
+
+        DataTableSpec dataTableSpec = new DataTableSpec(Stream.concat(leftColumnSpecs, rightColSpecs.stream()).toArray(DataColumnSpec[]::new));
+        return dataTableSpec;
+
+    }
 
     /**
      * Disambiguate or remove columns depending on duplicate handling.

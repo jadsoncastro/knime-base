@@ -55,6 +55,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.util.Optional;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -75,11 +76,17 @@ import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory.JoinAlgorithm;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataTableSpec;
+import org.knime.core.node.BufferedDataTable;
+import org.knime.core.node.ConfigurableNodeFactory.ConfigurableNodeDialog;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
+import org.knime.core.node.context.ModifiableNodeCreationConfiguration;
+import org.knime.core.node.context.ports.ExtendablePortGroup;
+import org.knime.core.node.defaultnodesettings.DialogComponentBoolean;
+import org.knime.core.node.defaultnodesettings.DialogComponentNumber;
 import org.knime.core.node.util.ColumnFilterPanel;
 import org.knime.core.node.util.ColumnPairsSelectionPanel;
 
@@ -88,7 +95,7 @@ import org.knime.core.node.util.ColumnPairsSelectionPanel;
  *
  * @author Heiko Hofer
  */
-public class Joiner3NodeDialog extends NodeDialogPane {
+public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog {
     private final JComboBox<JoinMode> m_joinMode =
             new JComboBox<>(new JoinMode[]{JoinMode.InnerJoin,
                     JoinMode.LeftOuterJoin, JoinMode.RightOuterJoin,
@@ -96,6 +103,11 @@ public class Joiner3NodeDialog extends NodeDialogPane {
 
     private final JComboBox<JoinAlgorithm> m_joinAlgorithm =
             new JComboBox<>(JoinAlgorithm.values());
+
+//    m_appendOrReplace = new DialogComponentButtonGroup(m_settings.getAppendOrReplaceSettingsModel(),
+//        "Result columns", true, new String[]{"Append as new columns", "Replace selected input columns"},
+//        new String[]{MultiColumnStringManipulationSettings.APPEND_ACTION,
+//            MultiColumnStringManipulationSettings.REPLACE_ACTION});
 
     private final JRadioButton m_dontExecute =
             new JRadioButton("Don't execute");
@@ -124,6 +136,9 @@ public class Joiner3NodeDialog extends NodeDialogPane {
             "Match all of the following");
     private JRadioButton m_matchAnyButton = new JRadioButton(
             "Match any of the following");
+
+    private DialogComponentBoolean unmatchedRowsToSeparateOutputPort = new DialogComponentBoolean(m_settings.m_unmatchedRowsToSeparateOutputPort, "Separate Output Ports for Unmatched Rows");
+    private DialogComponentNumber memoryLimitPercent = new DialogComponentNumber(m_settings.m_memoryLimitPercentSettingsModel, "Maximum Heap Memory Usage %", 1);
 
     private final JTextField m_maxOpenFiles = new JTextField();
     private final JTextField m_rowKeySeparator = new JTextField();
@@ -314,6 +329,10 @@ public class Joiner3NodeDialog extends NodeDialogPane {
         c.gridy++;
         c.gridwidth = 2;
         p.add(m_enableHiLite, c);
+        c.gridy++;
+        p.add(unmatchedRowsToSeparateOutputPort.getComponentPanel());
+        c.gridy++;
+        p.add(memoryLimitPercent.getComponentPanel());
 
         p.setBorder(BorderFactory.createTitledBorder("Performance Tuning"));
         return p;
@@ -473,11 +492,11 @@ public class Joiner3NodeDialog extends NodeDialogPane {
         m_rightFilterPanel.update(specs[1], false,
                 m_settings.getRightIncludeCols());
 
-        m_leftFilterPanel.setKeepAllSelected(m_settings.getLeftIncludeAll());
-        m_rightFilterPanel.setKeepAllSelected(m_settings.getRightIncludeAll());
-
-        m_removeLeftJoinCols.setSelected(m_settings.getRemoveLeftJoinCols());
-        m_removeRightJoinCols.setSelected(m_settings.getRemoveRightJoinCols());
+//        m_leftFilterPanel.setKeepAllSelected(m_settings.getLeftIncludeAll());
+//        m_rightFilterPanel.setKeepAllSelected(m_settings.getRightIncludeAll());
+//
+//        m_removeLeftJoinCols.setSelected(m_settings.getRemoveLeftJoinCols());
+//        m_removeRightJoinCols.setSelected(m_settings.getRemoveRightJoinCols());
 
         m_maxOpenFiles.setText(Integer.toString(m_settings.getMaxOpenFiles()));
         m_rowKeySeparator.setText(m_settings.getRowKeySeparator());
@@ -554,11 +573,11 @@ public class Joiner3NodeDialog extends NodeDialogPane {
                 m_rightFilterPanel.getIncludedColumnSet().toArray(
                         new String[0]));
 
-        m_settings.setLeftIncludeAll(m_leftFilterPanel.isKeepAllSelected());
-        m_settings.setRightIncludeAll(m_rightFilterPanel.isKeepAllSelected());
-
-        m_settings.setRemoveLeftJoinCols(m_removeLeftJoinCols.isSelected());
-        m_settings.setRemoveRightJoinCols(m_removeRightJoinCols.isSelected());
+//        m_settings.setLeftIncludeAll(m_leftFilterPanel.isKeepAllSelected());
+//        m_settings.setRightIncludeAll(m_rightFilterPanel.isKeepAllSelected());
+//
+//        m_settings.setRemoveLeftJoinCols(m_removeLeftJoinCols.isSelected());
+//        m_settings.setRemoveRightJoinCols(m_removeRightJoinCols.isSelected());
 
         m_settings.setMaxOpenFiles(Integer.parseInt(m_maxOpenFiles.getText()));
         m_settings.setRowKeySeparator(m_rowKeySeparator.getText());
@@ -566,4 +585,33 @@ public class Joiner3NodeDialog extends NodeDialogPane {
 
         m_settings.saveSettings(settings);
     }
+
+//    private boolean m_portConfigChanged = false;
+
+    @Override
+    public Optional<ModifiableNodeCreationConfiguration> getNewNodeCreationConfiguration() {
+        ExtendablePortGroup outputConfig = (ExtendablePortGroup)m_nodeCreationConfig.getPortConfig().get()
+            .getGroup(Joiner3NodeFactory.UNMATCHED_ROWS_OUTPUT_PORT_GROUP);
+
+        while (outputConfig.hasConfiguredPorts()) {
+            outputConfig.removeLastPort();
+        }
+
+        if(m_settings.isUnmatchedRowsToSeparateOutputPort()) {
+            outputConfig.addPort(BufferedDataTable.TYPE);
+            outputConfig.addPort(BufferedDataTable.TYPE);
+        }
+
+        return Optional.ofNullable(m_nodeCreationConfig);
+    }
+    private ModifiableNodeCreationConfiguration m_nodeCreationConfig;
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setCurrentNodeCreationConfiguration(final ModifiableNodeCreationConfiguration nodeCreationConfig) {
+        m_nodeCreationConfig = nodeCreationConfig;
+    }
+
 }

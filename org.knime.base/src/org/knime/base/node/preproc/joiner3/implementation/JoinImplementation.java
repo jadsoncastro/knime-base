@@ -53,7 +53,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +69,6 @@ import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTable;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.DataType;
 import org.knime.core.data.RowIterator;
 import org.knime.core.data.RowKey;
 import org.knime.core.data.def.DefaultCellIterator;
@@ -102,15 +100,12 @@ public abstract class JoinImplementation {
     protected Joiner3Settings m_settings;
 
     /**
-     *
-     */
-    protected final HashMap<DataTable, String[]> m_joinColumns;
-
-    /**
      * If true, {@link #m_bigger} references the outer table and {@link #m_smaller} references the inner table. If
      * false, it's the other way around.
      */
-    protected final boolean m_outerIsBigger;
+    protected final boolean m_leftIsBigger;
+
+    BufferedDataTable m_leftTable, m_rightTable;
 
     /**
      * References the table (inner or outer) with fewer rows. This value is empty if tables do not provide row counts to
@@ -185,47 +180,59 @@ public abstract class JoinImplementation {
 
         m_settings = settings;
 
+        BufferedDataTable outer = tables[0];
+        m_leftTable = outer;
+
+        BufferedDataTable inner = tables[1];
+        m_rightTable = inner;
+
+        // this is write through, sorting the list sorts the array
         m_tables = Arrays.asList(tables);
 
-
-        //FIXME
-        BufferedDataTable outer = tables[0];
-        BufferedDataTable inner = tables[1];
-
-        // if all tables have row counts, sort them by row count descending
         m_tables.sort(Comparator.comparingLong(BufferedDataTable::size).reversed());
+
+        // TODO this can probably be removed
         m_bigger = m_tables.get(0);
         m_smaller = m_tables.get(1);
-        m_outerIsBigger = m_bigger == outer;
+        m_leftIsBigger = m_bigger == outer;
 
         // first table is the biggest
 
-        // Map.of is Java 9
-        m_joinColumns = new HashMap<>();
-        m_tableSettings.put(outer, new TableSettings(settings, outer, Joiner3Settings::getLeftJoinColumns));
-        m_tableSettings.put(inner, new TableSettings(settings, inner, Joiner3Settings::getRightJoinColumns));
+        // store join columns, include columns, etc. for each table
+        m_tableSettings.put(outer, new TableSettings(settings, outer, Joiner3Settings::getLeftJoinColumns, Joiner3Settings::getLeftIncludeCols));
+        m_tableSettings.put(inner, new TableSettings(settings, inner, Joiner3Settings::getRightJoinColumns, Joiner3Settings::getRightIncludeCols));
 
         m_runtimeWarnings = new ArrayList<String>();
 
         // FIXME multiple tables
-        m_outputSpec = createSpec(Arrays.stream(tables).map(BufferedDataTable::getDataTableSpec).toArray(DataTableSpec[]::new));
-//        DataTableSpec joinedTableSpec = Joiner.createOutputSpec(m_settings, s -> {},
-//            leftTable.getSpec(), rightTable.getSpec());
+//        m_outputSpec = createSpec(Arrays.stream(tables).map(BufferedDataTable::getDataTableSpec).toArray(DataTableSpec[]::new));
+        // TODO remove try catch fix error structure
+        m_outputSpec = Joiner.createOutputSpec(m_settings, s -> {}, m_leftTable.getSpec(), m_rightTable.getSpec());
 
     }
 
     class TableSettings{
 
         String[] joinColumnNames;
+        String[] includeColumnNames;
         int[] joinColumnIndices;
+        int[] includeColumnIndices;
 
-        TableSettings(final Joiner3Settings settings, final BufferedDataTable table, final Function<Joiner3Settings, String[]> getter){
-            joinColumnNames = getter.apply(settings);
+        TableSettings(final Joiner3Settings settings, final BufferedDataTable table, final Function<Joiner3Settings, String[]> joinColumns, final Function<Joiner3Settings, String[]> includeColumns){
+            joinColumnNames = joinColumns.apply(settings);
+            includeColumnNames = includeColumns.apply(settings);
             joinColumnIndices = table.getDataTableSpec().columnsToIndices(joinColumnNames);
+            includeColumnIndices = table.getDataTableSpec().columnsToIndices(includeColumnNames);
         }
     }
-    protected JoinTuple getJoinTuple(final BufferedDataTable table, final DataRow row) {
-        int[] indices = m_tableSettings.get(table).joinColumnIndices;
+
+    /**
+     * Extract the values from the join columns from the row.
+     * @param table
+     * @param row
+     * @return
+     */
+    protected JoinTuple getJoinTuple(final int[] indices, final DataRow row) {
         DataCell[] cells = new DataCell[indices.length];
         for (int i = 0; i < cells.length; i++) {
             if (indices[i] >= 0) {
@@ -254,172 +261,6 @@ public abstract class JoinImplementation {
 //        return leftTableJoinIndices;
 //    }
 
-    /**
-     * @param dataTableSpec input spec of the left DataTable
-     * @return the names of all columns to include from the left input table
-     * @throws InvalidSettingsException if the input spec is not compatible with the settings
-     * @since 2.12
-     */
-    public List<String> getLeftIncluded(final DataTableSpec dataTableSpec)
-     {
-        List<String> leftCols = new ArrayList<String>();
-        for (DataColumnSpec column : dataTableSpec) {
-            leftCols.add(column.getName());
-        }
-        // Check if left joining columns are in table spec
-        Set<String> leftJoinCols = new HashSet<String>();
-        leftJoinCols.addAll(Arrays.asList(m_settings.getLeftJoinColumns()));
-        leftJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
-
-
-        if (!m_settings.getLeftIncludeAll()) {
-            List<String> leftIncludes =
-                Arrays.asList(m_settings.getLeftIncludeCols());
-            leftCols.retainAll(leftIncludes);
-        }
-        if (m_settings.getRemoveLeftJoinCols()) {
-            leftCols.removeAll(Arrays.asList(m_settings.getLeftJoinColumns()));
-        }
-        return leftCols;
-    }
-
-    /**
-     * @param dataTableSpec input spec of the right DataTable
-     * @return the names of all columns to include from the left input table
-     * @throws InvalidSettingsException if the input spec is not compatible with the settings
-     * @since 2.12
-     */
-    public List<String> getRightIncluded(final DataTableSpec dataTableSpec)
-     {
-        List<String> rightCols = new ArrayList<String>();
-        for (DataColumnSpec column : dataTableSpec) {
-            rightCols.add(column.getName());
-        }
-        // Check if right joining columns are in table spec
-        Set<String> rightJoinCols = new HashSet<String>();
-        rightJoinCols.addAll(Arrays.asList(m_settings.getRightJoinColumns()));
-        rightJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
-
-
-        if (!m_settings.getRightIncludeAll()) {
-            List<String> rightIncludes =
-                Arrays.asList(m_settings.getRightIncludeCols());
-            rightCols.retainAll(rightIncludes);
-        }
-        if (m_settings.getRemoveRightJoinCols()) {
-            rightCols
-            .removeAll(Arrays.asList(m_settings.getRightJoinColumns()));
-        }
-        return rightCols;
-    }
-    /**
-     * Creates a spec for the output table by taking care of duplicate columns.
-     *
-     * @param specs the specs of the two input tables
-     * @return the spec of the output table
-     * @throws InvalidSettingsException when settings are not supported
-     */
-    protected DataTableSpec createSpec(final DataTableSpec[] specs)
-     {
-
-        List<String> leftCols = getLeftIncluded(specs[0]);
-        List<String> rightCols = getRightIncluded(specs[1]);
-
-        List<String> duplicates = new ArrayList<String>();
-        duplicates.addAll(leftCols);
-        duplicates.retainAll(rightCols);
-
-
-        if (m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.Filter)) {
-
-            for (String duplicate : duplicates) {
-                DataType leftType = specs[0].getColumnSpec(duplicate).getType();
-                DataType rightType = specs[1].getColumnSpec(duplicate).getType();
-            }
-
-            rightCols.removeAll(leftCols);
-        }
-
-
-        // check if data types of joining columns do match
-//        for (int i = 0; i < m_settings.getLeftJoinColumns().length; i++) {
-//            String leftJoinAttr = m_settings.getLeftJoinColumns()[i];
-//            boolean leftJoinAttrIsRowKey =
-//                    Joiner3Settings.ROW_KEY_IDENTIFIER.equals(leftJoinAttr);
-//            DataType leftType = leftJoinAttrIsRowKey
-//            ? StringCell.TYPE
-//                    : specs[0].getColumnSpec(leftJoinAttr).getType();
-//            String rightJoinAttr = m_settings.getRightJoinColumns()[i];
-//            boolean rightJoinAttrIsRowKey =
-//                Joiner3Settings.ROW_KEY_IDENTIFIER.equals(rightJoinAttr);
-//            DataType rightType = rightJoinAttrIsRowKey
-//            ? StringCell.TYPE
-//                    : specs[1].getColumnSpec(rightJoinAttr).getType();
-//            if (!leftType.equals(rightType)) {
-//                String left = leftJoinAttrIsRowKey ? "Row ID" : leftJoinAttr;
-//                String right = rightJoinAttrIsRowKey ? "Row ID" : rightJoinAttr;
-//                // check different cases here to give meaningful error messages
-//
-//            }
-//        }
-
-        @SuppressWarnings("unchecked")
-        UniqueNameGenerator nameGen = new UniqueNameGenerator(
-            Collections.EMPTY_SET);
-        m_leftSurvivors = new ArrayList<String>();
-        List<DataColumnSpec> outColSpecs = new ArrayList<DataColumnSpec>();
-        for (int i = 0; i < specs[0].getNumColumns(); i++) {
-            DataColumnSpec columnSpec = specs[0].getColumnSpec(i);
-            if (leftCols.contains(columnSpec.getName())) {
-                outColSpecs.add(columnSpec);
-                nameGen.newName(columnSpec.getName());
-                m_leftSurvivors.add(columnSpec.getName());
-            }
-        }
-
-        m_rightSurvivors = new ArrayList<String>();
-        for (int i = 0; i < specs[1].getNumColumns(); i++) {
-            DataColumnSpec columnSpec = specs[1].getColumnSpec(i);
-            if (rightCols.contains(columnSpec.getName())) {
-                if (m_settings.getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)) {
-                    if (m_leftSurvivors.contains(columnSpec.getName())
-                            || m_rightSurvivors.contains(columnSpec.getName())) {
-                        String newName = columnSpec.getName();
-                        do {
-                            newName += m_settings.getDuplicateColumnSuffix();
-                        } while (m_leftSurvivors.contains(newName)
-                                || m_rightSurvivors.contains(newName));
-
-                        DataColumnSpecCreator dcsc =
-                            new DataColumnSpecCreator(columnSpec);
-                        dcsc.removeAllHandlers();
-                        dcsc.setName(newName);
-                        outColSpecs.add(dcsc.createSpec());
-                        rightCols.add(newName);
-                    } else {
-                        outColSpecs.add(columnSpec);
-                    }
-                } else {
-                    String newName = nameGen.newName(columnSpec.getName());
-                    if (newName.equals(columnSpec.getName())) {
-                        outColSpecs.add(columnSpec);
-                    } else {
-                        DataColumnSpecCreator dcsc =
-                            new DataColumnSpecCreator(columnSpec);
-                        dcsc.removeAllHandlers();
-                        dcsc.setName(newName);
-                        outColSpecs.add(dcsc.createSpec());
-                    }
-
-                }
-                m_rightSurvivors.add(columnSpec.getName());
-            }
-        }
-
-        return new DataTableSpec(outColSpecs.toArray(
-                new DataColumnSpec[outColSpecs.size()]));
-    }
 
     /**
      * @param specs
@@ -710,28 +551,28 @@ public abstract class JoinImplementation {
     }
 
     /**
-     * @param bigger a row from the bigger table.
-     * @param smaller a row from the smaller table.
+     * @param probeRow a row from the bigger table.
+     * @param hashRow a row from the smaller table.
      * @return the row that belongs to the outer table.
      */
-    protected DataRow getOuter(final DataRow bigger, final DataRow smaller) {
-        if (m_outerIsBigger) {
-            return bigger;
+    protected DataRow getLeft(final DataRow probeRow, final DataRow hashRow) {
+        if (m_leftIsBigger) {
+            return probeRow;
         } else {
-            return smaller;
+            return hashRow;
         }
     }
 
     /**
-     * @param bigger a row from the bigger table.
-     * @param smaller a row from the smaller table.
+     * @param probeRow a row from the bigger table.
+     * @param hashRow a row from the smaller table.
      * @return the row that belongs to the inner table.
      */
-    protected DataRow getInner(final DataRow bigger, final DataRow smaller) {
-        if (m_outerIsBigger) {
-            return smaller;
+    protected DataRow getRight(final DataRow probeRow, final DataRow hashRow) {
+        if (m_leftIsBigger) {
+            return hashRow;
         } else {
-            return bigger;
+            return probeRow;
         }
     }
 

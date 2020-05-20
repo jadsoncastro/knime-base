@@ -47,11 +47,11 @@
  */
 package org.knime.base.node.preproc.joiner3;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -65,6 +65,8 @@ import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.defaultnodesettings.SettingsModelBoolean;
+import org.knime.core.node.defaultnodesettings.SettingsModelIntegerBounded;
 import org.knime.core.node.util.ConvenienceMethods;
 
 /**
@@ -80,6 +82,10 @@ public class Joiner3Settings {
      */
     public interface Extractor extends Function<DataRow, JoinTuple> {}
 
+    final SettingsModelIntegerBounded m_memoryLimitPercentSettingsModel = new SettingsModelIntegerBounded("memoryLimitPercent", 90, 1, 100);
+
+    final SettingsModelBoolean m_unmatchedRowsToSeparateOutputPort = new SettingsModelBoolean("unmatchedRowsToSeparateOutputPort", false);
+
     private static final String COPOSITION_MODE = "compositionMode";
 
     private static final String JOIN_MODE = "joinMode";
@@ -94,19 +100,8 @@ public class Joiner3Settings {
 
     private static final String LEFT_INCLUDE_COLUMNS = "leftIncludeCols";
 
-    private static final String LEFT_INCLUDE_ALL = "leftIncludeAll";
-
-    private static final String REMOVE_LEFT_JOINING_COLUMNS = "rmLeftJoinCols";
-
     private static final String RIGHT_INCLUDE_COLUMNS = "rightIncludeCols";
 
-    private static final String RIGHT_INCLUDE_ALL = "rightIncludeAll";
-
-    private static final String REMOVE_RIGHT_JOINING_COLUMNS = "rmRightJoinCols";
-
-    /**
-     * TODO this is currently not used, can be deleted
-     */
     private static final String MAX_OPEN_FILES = "maxOpenFiles";
 
     private static final String ROW_KEY_SEPARATOR = "rowKeySeparator";
@@ -225,12 +220,6 @@ public class Joiner3Settings {
     private String[] m_leftIncludeCols = new String[0];
     private String[]  m_rightIncludeCols = new String[0];
 
-    private boolean  m_leftIncludeAll = true;
-    private boolean m_rightIncludeAll = true;
-
-    private boolean m_rmLeftJoinCols = false;
-    private boolean m_rmRightJoinCols = true;
-
     private int m_maxOpenFiles = 200;
     private String m_rowKeySeparator = "_";
     private boolean m_enableHiLite = false;
@@ -322,76 +311,76 @@ public class Joiner3Settings {
         return result;
     }
 
-    /**
-     * @param dataTableSpec input spec of the left DataTable
-     * @return the names of all columns to include from the left input table
-     * @throws InvalidSettingsException if the input spec is not compatible with the settings
-     * @since 2.12
-     * TODO replace with multiple tables version
-     */
-    @Deprecated
-    public List<String> getLeftIncluded(final DataTableSpec dataTableSpec)
-    throws InvalidSettingsException {
-        List<String> leftCols = new ArrayList<String>();
-        for (DataColumnSpec column : dataTableSpec) {
-            leftCols.add(column.getName());
-        }
-        // Check if left joining columns are in table spec
-        Set<String> leftJoinCols = new HashSet<String>();
-        leftJoinCols.addAll(Arrays.asList(getLeftJoinColumns()));
-        leftJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
-        if (!leftCols.containsAll(leftJoinCols)) {
-            leftJoinCols.removeAll(leftCols);
-            throw new InvalidSettingsException("The top input table has "
-               + "changed. Some joining columns are missing: "
-               + ConvenienceMethods.getShortStringFrom(leftJoinCols, 3));
-        }
+//    /**
+//     * @param dataTableSpec input spec of the left DataTable
+//     * @return the names of all columns to include from the left input table
+//     * @throws InvalidSettingsException if the input spec is not compatible with the settings
+//     * @since 2.12
+//     * TODO replace with multiple tables version
+//     */
+//    @Deprecated
+//    public List<String> getLeftIncluded(final DataTableSpec dataTableSpec)
+//    throws InvalidSettingsException {
+//        List<String> leftCols = new ArrayList<String>();
+//        for (DataColumnSpec column : dataTableSpec) {
+//            leftCols.add(column.getName());
+//        }
+//        // Check if left joining columns are in table spec
+//        Set<String> leftJoinCols = new HashSet<String>();
+//        leftJoinCols.addAll(Arrays.asList(getLeftJoinColumns()));
+//        leftJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
+//        if (!leftCols.containsAll(leftJoinCols)) {
+//            leftJoinCols.removeAll(leftCols);
+//            throw new InvalidSettingsException("The top input table has "
+//               + "changed. Some joining columns are missing: "
+//               + ConvenienceMethods.getShortStringFrom(leftJoinCols, 3));
+//        }
+//
+//        if (!getLeftIncludeAll()) {
+//            List<String> leftIncludes =
+//                Arrays.asList(getLeftIncludeCols());
+//            leftCols.retainAll(leftIncludes);
+//        }
+//        if (getRemoveLeftJoinCols()) {
+//            leftCols.removeAll(Arrays.asList(getLeftJoinColumns()));
+//        }
+//        return leftCols;
+//    }
 
-        if (!getLeftIncludeAll()) {
-            List<String> leftIncludes =
-                Arrays.asList(getLeftIncludeCols());
-            leftCols.retainAll(leftIncludes);
-        }
-        if (getRemoveLeftJoinCols()) {
-            leftCols.removeAll(Arrays.asList(getLeftJoinColumns()));
-        }
-        return leftCols;
-    }
-
-    /**
-     * @param dataTableSpec input spec of the right DataTable
-     * @return the names of all columns to include from the left input table
-     * @throws InvalidSettingsException if the input spec is not compatible with the settings
-     * @since 2.12
-     * TODO replace with multiple tables version
-     */
-    @Deprecated
-    public List<String> getRightIncluded(final DataTableSpec dataTableSpec)
-        throws InvalidSettingsException {
-        List<String> rightCols = new ArrayList<String>();
-        for (DataColumnSpec column : dataTableSpec) {
-            rightCols.add(column.getName());
-        }
-        // Check if right joining columns are in table spec
-        Set<String> rightJoinCols = new HashSet<String>();
-        rightJoinCols.addAll(Arrays.asList(getRightJoinColumns()));
-        rightJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
-        if (!rightCols.containsAll(rightJoinCols)) {
-            rightJoinCols.removeAll(rightCols);
-            throw new InvalidSettingsException(
-                "The bottom input table has " + "changed. Some joining columns are missing: "
-                    + ConvenienceMethods.getShortStringFrom(rightJoinCols, 3));
-        }
-
-        if (!getRightIncludeAll()) {
-            List<String> rightIncludes = Arrays.asList(getRightIncludeCols());
-            rightCols.retainAll(rightIncludes);
-        }
-        if (getRemoveRightJoinCols()) {
-            rightCols.removeAll(Arrays.asList(getRightJoinColumns()));
-        }
-        return rightCols;
-    }
+//    /**
+//     * @param dataTableSpec input spec of the right DataTable
+//     * @return the names of all columns to include from the left input table
+//     * @throws InvalidSettingsException if the input spec is not compatible with the settings
+//     * @since 2.12
+//     * TODO replace with multiple tables version
+//     */
+//    @Deprecated
+//    public List<String> getRightIncluded(final DataTableSpec dataTableSpec)
+//        throws InvalidSettingsException {
+//        List<String> rightCols = new ArrayList<String>();
+//        for (DataColumnSpec column : dataTableSpec) {
+//            rightCols.add(column.getName());
+//        }
+//        // Check if right joining columns are in table spec
+//        Set<String> rightJoinCols = new HashSet<String>();
+//        rightJoinCols.addAll(Arrays.asList(getRightJoinColumns()));
+//        rightJoinCols.remove(Joiner3Settings.ROW_KEY_IDENTIFIER);
+//        if (!rightCols.containsAll(rightJoinCols)) {
+//            rightJoinCols.removeAll(rightCols);
+//            throw new InvalidSettingsException(
+//                "The bottom input table has " + "changed. Some joining columns are missing: "
+//                    + ConvenienceMethods.getShortStringFrom(rightJoinCols, 3));
+//        }
+//
+//        if (!getRightIncludeAll()) {
+//            List<String> rightIncludes = Arrays.asList(getRightIncludeCols());
+//            rightCols.retainAll(rightIncludes);
+//        }
+//        if (getRemoveRightJoinCols()) {
+//            rightCols.removeAll(Arrays.asList(getRightJoinColumns()));
+//        }
+//        return rightCols;
+//    }
 
     /**
      * TODO generalize to multiple tables
@@ -593,86 +582,6 @@ public class Joiner3Settings {
     }
 
     /**
-     * Returns true when all columns of the left table should be added to
-     * the joining table.
-     *
-     * @return the leftIncludeAll
-     */
-    public boolean getLeftIncludeAll() {
-        return m_leftIncludeAll;
-    }
-
-    /**
-     * Pass true when all columns of the left table should be added to
-     * the joining table.
-     *
-     * @param leftIncludeAll the leftIncludeAll to set
-     */
-    public void setLeftIncludeAll(final boolean leftIncludeAll) {
-        m_leftIncludeAll = leftIncludeAll;
-    }
-
-    /**
-     * Returns true when all columns of the right table should be added to
-     * the joining table.
-     *
-     * @return the rightIncludeAll
-     */
-    public boolean getRightIncludeAll() {
-        return m_rightIncludeAll;
-    }
-
-    /**
-     * Pass true when all columns of the right table should be added to
-     * the joining table.
-     *
-     * @param rightIncludeAll the rightIncludeAll to set
-     */
-    public void setRightIncludeAll(final boolean rightIncludeAll) {
-        m_rightIncludeAll = rightIncludeAll;
-    }
-
-    /**
-     * Returns true when the columns returned by getLeftJoinColumns() should
-     * not be added to the joining table.
-     *
-     * @return the rmLeftJoinCols
-     */
-    public boolean getRemoveLeftJoinCols() {
-        return m_rmLeftJoinCols;
-    }
-
-    /**
-     * Pass true when the columns returned by getLeftJoinColumns() should
-     * not be added to the joining table.
-     *
-     * @param rmLeftJoinCols the rmLeftJoinCols to set
-     */
-    public void setRemoveLeftJoinCols(final boolean rmLeftJoinCols) {
-        m_rmLeftJoinCols = rmLeftJoinCols;
-    }
-
-    /**
-     * Returns true when the columns returned by getRightJoinColumns() should
-     * not be added to the joining table.
-     *
-     * @return the rmRightJoinCols
-     */
-    public boolean getRemoveRightJoinCols() {
-        return m_rmRightJoinCols;
-    }
-
-    /**
-     * Pass true when the columns returned by getRightJoinColumns() should
-     * not be added to the joining table.
-     *
-     * @param rmRightJoinCols the rmRightJoinCols to set
-     */
-    public void setRemoveRightJoinCols(final boolean rmRightJoinCols) {
-        m_rmRightJoinCols = rmRightJoinCols;
-    }
-
-    /**
      * Return number of files that are allowed to be openend by the Joiner.
      *
      * @return the maxOpenFiles
@@ -739,6 +648,8 @@ public class Joiner3Settings {
 
         m_version = settings.getString(VERSION, VERSION_1);
 
+        m_memoryLimitPercentSettingsModel.loadSettingsFrom(settings);
+        m_unmatchedRowsToSeparateOutputPort.loadSettingsFrom(settings);
 
         m_duplicateHandling =
                 DuplicateHandling.valueOf(settings
@@ -759,10 +670,6 @@ public class Joiner3Settings {
         m_duplicateColSuffix = settings.getString(DUPLICATE_COLUMN_SUFFIX);
         m_leftIncludeCols = settings.getStringArray(LEFT_INCLUDE_COLUMNS);
         m_rightIncludeCols = settings.getStringArray(RIGHT_INCLUDE_COLUMNS);
-        m_leftIncludeAll = settings.getBoolean(LEFT_INCLUDE_ALL);
-        m_rightIncludeAll = settings.getBoolean(RIGHT_INCLUDE_ALL);
-        m_rmLeftJoinCols = settings.getBoolean(REMOVE_LEFT_JOINING_COLUMNS);
-        m_rmRightJoinCols = settings.getBoolean(REMOVE_RIGHT_JOINING_COLUMNS);
         m_maxOpenFiles = settings.getInt(MAX_OPEN_FILES);
         m_rowKeySeparator = settings.getString(ROW_KEY_SEPARATOR);
         m_enableHiLite = settings.getBoolean(ENABLE_HILITE);
@@ -778,10 +685,16 @@ public class Joiner3Settings {
      */
     public void loadSettingsForDialog(final NodeSettingsRO settings) {
         // load version introduced in 2.7
+        m_version = settings.getString(VERSION, VERSION_1);
 
         m_joinAlgorithm = JoinAlgorithm.valueOf(settings.getString(JOIN_ALGORITHM_KEY, m_joinAlgorithm.name()));
 
-        m_version = settings.getString(VERSION, VERSION_1);
+        try {
+            m_memoryLimitPercentSettingsModel.loadSettingsFrom(settings);
+            m_unmatchedRowsToSeparateOutputPort.loadSettingsFrom(settings);
+        } catch (InvalidSettingsException e) {
+            System.err.println(e.getLocalizedMessage());
+        }
 
         m_duplicateHandling = DuplicateHandling
             .valueOf(settings.getString(DUPLICATE_COLUMN_HANDLING, DuplicateHandling.AppendSuffix.toString()));
@@ -800,11 +713,6 @@ public class Joiner3Settings {
         m_leftIncludeCols = settings.getStringArray(LEFT_INCLUDE_COLUMNS, new String[0]);
         m_rightIncludeCols = settings.getStringArray(RIGHT_INCLUDE_COLUMNS, new String[0]);
 
-        m_leftIncludeAll = settings.getBoolean(LEFT_INCLUDE_ALL, true);
-        m_rightIncludeAll = settings.getBoolean(RIGHT_INCLUDE_ALL, true);
-
-        m_rmLeftJoinCols = settings.getBoolean(REMOVE_LEFT_JOINING_COLUMNS, false);
-        m_rmRightJoinCols = settings.getBoolean(REMOVE_RIGHT_JOINING_COLUMNS, true);
         m_maxOpenFiles = settings.getInt(MAX_OPEN_FILES, 200);
         m_rowKeySeparator = settings.getString(ROW_KEY_SEPARATOR, "_");
         m_enableHiLite = settings.getBoolean(ENABLE_HILITE, false);
@@ -820,29 +728,24 @@ public class Joiner3Settings {
     public void saveSettings(final NodeSettingsWO settings) {
 
         settings.addString(JOIN_ALGORITHM_KEY, m_joinAlgorithm.name());
+        m_memoryLimitPercentSettingsModel.saveSettingsTo(settings);
+        m_unmatchedRowsToSeparateOutputPort.saveSettingsTo(settings);
 
         settings.addString(DUPLICATE_COLUMN_HANDLING,
                 m_duplicateHandling.toString());
         settings.addString(COPOSITION_MODE, m_compositionMode.toString());
         settings.addString(JOIN_MODE, m_joinMode.name());
-        settings.addStringArray(LEFT_JOINING_COLUMNS
-                , m_leftJoinColumns);
-        settings.addStringArray(RIGHT_JOINING_COLUMNS
-                , m_rightJoinColumns);
+        settings.addStringArray(LEFT_JOINING_COLUMNS, m_leftJoinColumns);
+        settings.addStringArray(RIGHT_JOINING_COLUMNS, m_rightJoinColumns);
         settings.addString(DUPLICATE_COLUMN_SUFFIX, m_duplicateColSuffix);
         settings.addStringArray(LEFT_INCLUDE_COLUMNS, m_leftIncludeCols);
         settings.addStringArray(RIGHT_INCLUDE_COLUMNS, m_rightIncludeCols);
-        settings.addBoolean(LEFT_INCLUDE_ALL, m_leftIncludeAll);
-        settings.addBoolean(RIGHT_INCLUDE_ALL, m_rightIncludeAll);
-        settings.addBoolean(REMOVE_LEFT_JOINING_COLUMNS, m_rmLeftJoinCols);
-        settings.addBoolean(REMOVE_RIGHT_JOINING_COLUMNS, m_rmRightJoinCols);
         settings.addInt(MAX_OPEN_FILES, m_maxOpenFiles);
         settings.addString(ROW_KEY_SEPARATOR, m_rowKeySeparator);
         settings.addBoolean(ENABLE_HILITE, m_enableHiLite);
         // save default values for settings that were removed in 2.5, so that
         // a workflow created with 2.5 can be opened in 2.4.
-        settings.addInt("numBitsInitial", 6);
-        settings.addInt("numBitsMaximal", Integer.SIZE);
+        // TODO review
         settings.addDouble("usedMemoryThreshold", 0.85);
         settings.addLong("minAvailableMemory", 10000000L);
         settings.addBoolean("memUseCollectionUsage", true);
@@ -857,5 +760,25 @@ public class Joiner3Settings {
 
     public void setJoinAlgorithm(final JoinAlgorithm joinAlgorithm) {
         m_joinAlgorithm = joinAlgorithm;
+    }
+
+    public int getMemoryLimitPercent() {
+        return m_memoryLimitPercentSettingsModel.getIntValue();
+    }
+
+    public boolean isUnmatchedRowsToSeparateOutputPort() {
+        return m_unmatchedRowsToSeparateOutputPort.getBooleanValue();
+    }
+
+    public String[] getRightTargetColumnNames() {
+        return getRightIncludeCols();
+    }
+
+    // TODO configure this
+    // called if the column name is already taken by the outer table, must never return the same name again
+    BiFunction<DataTableSpec, String, String> m_nameTransfomer = (s, n) -> n+" (#1)";
+
+    public String transformName(final DataTableSpec tableSpec, final String name) {
+        return m_nameTransfomer.apply(tableSpec, name);
     }
 }

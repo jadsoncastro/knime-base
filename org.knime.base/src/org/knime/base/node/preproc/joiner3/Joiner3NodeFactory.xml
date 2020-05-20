@@ -98,6 +98,7 @@
         <inPort index="0" name="Outer table">The outer table contributes the leftmost row values. This port supports streaming.</inPort>
         <inPort index="1" name="Inner table">The first inner table contributes the values of the second column set.</inPort>
         <dynInPort name="Additional inner table" group-identifier="Additional inner table" insert-before="2"></dynInPort>
-        <outPort index="0" name="Join result">The composite table resulting from combining matching input rows from all input tables.</outPort>
+        <outPort index="0" name="Join result">Either all result rows, or the result of the inner join (if the unmatched rows are output in separate ports).</outPort>
+        <dynOutPort name="Unmatched rows" group-identifier="Unmatched rows" insert-before="1"></dynOutPort>
     </ports>
 </knimeNode>

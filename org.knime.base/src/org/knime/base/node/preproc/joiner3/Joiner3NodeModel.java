@@ -49,7 +49,6 @@ package org.knime.base.node.preproc.joiner3;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
@@ -118,6 +117,7 @@ public class Joiner3NodeModel extends NodeModel {
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs)
             throws InvalidSettingsException {
 
+        // TODO create more table specs for split output
         return new DataTableSpec[]{Joiner.createOutputSpec(m_settings, this::setWarningMessage, inSpecs)};
     }
 
@@ -151,6 +151,82 @@ public class Joiner3NodeModel extends NodeModel {
         LOGGER.info(String.format("%s rows ⨝ %s rows = %s rows (%sms)", inData[0].size(), inData[1].size(), joinedTable[0].size(), after - before));
 
         return joinedTable;
+    }
+
+    void computeOutputColumnNames() {
+        // TODO which of the original options are necessary?
+        // Joiner 2 offered duplicate column handling via
+        // - filter duplicate columns
+        // - don't execute
+        // append suffix automatic... (#1) I think
+        // append custom suffix
+        // anyways, since it is possible to remove the join columns, we need to projection steps.
+        // one to slim down the table to the necessary columns and one final to hide unwanted columns in the output table
+
+        // TODO deduplication doesn't work with getUniqueColumnName -- e.g., Region (#1) although not included from left table
+        // TODO can't exclude join columns? not a priori, only afterwards. guarantee this through the dialog
+
+     // concatenate all columns into one long new specification
+        // e.g., (age, income, height) ⨝ (age, education, sex, income) ->
+        //  (age, income, height, age (#1), education, sex, income (#1))
+
+        //            DataColumnSpec[] concatenated =
+        //                Arrays.stream(specs).flatMap(DataTableSpec::stream).toArray(DataColumnSpec[]::new);
+
+        //            return new DataTableSpec(concatenated);
+//
+//        String[] leftCols = settings.getLeftIncludeCols();
+//        String[] rightCols = settings.getRightIncludeCols();
+//
+//        @SuppressWarnings("unchecked")
+//        UniqueNameGenerator nameGen = new UniqueNameGenerator(Collections.EMPTY_SET);
+//        List<String> m_leftSurvivors = new ArrayList<String>();
+//
+//        List<DataColumnSpec> outColSpecs = new ArrayList<DataColumnSpec>();
+//        for (int i = 0; i < specs[0].getNumColumns(); i++) {
+//            DataColumnSpec columnSpec = specs[0].getColumnSpec(i);
+//            if (leftCols.contains(columnSpec.getName())) {
+//                outColSpecs.add(columnSpec);
+//                nameGen.newName(columnSpec.getName());
+//                m_leftSurvivors.add(columnSpec.getName());
+//            }
+//        }
+//
+//        List<String> m_rightSurvivors = new ArrayList<String>();
+//        for (int i = 0; i < specs[1].getNumColumns(); i++) {
+//            DataColumnSpec columnSpec = specs[1].getColumnSpec(i);
+//            if (rightCols.contains(columnSpec.getName())) {
+//                if (settings.getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)) {
+//                    if (m_leftSurvivors.contains(columnSpec.getName())
+//                        || m_rightSurvivors.contains(columnSpec.getName())) {
+//                        String newName = columnSpec.getName();
+//                        do {
+//                            newName += settings.getDuplicateColumnSuffix();
+//                        } while (m_leftSurvivors.contains(newName) || m_rightSurvivors.contains(newName));
+//
+//                        DataColumnSpecCreator dcsc = new DataColumnSpecCreator(columnSpec);
+//                        dcsc.removeAllHandlers();
+//                        dcsc.setName(newName);
+//                        outColSpecs.add(dcsc.createSpec());
+//                        rightCols.add(newName);
+//                    } else {
+//                        outColSpecs.add(columnSpec);
+//                    }
+//                } else {
+//                    String newName = nameGen.newName(columnSpec.getName());
+//                    if (newName.equals(columnSpec.getName())) {
+//                        outColSpecs.add(columnSpec);
+//                    } else {
+//                        DataColumnSpecCreator dcsc = new DataColumnSpecCreator(columnSpec);
+//                        dcsc.removeAllHandlers();
+//                        dcsc.setName(newName);
+//                        outColSpecs.add(dcsc.createSpec());
+//                    }
+//
+//                }
+//                m_rightSurvivors.add(columnSpec.getName());
+//            }
+//        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -288,19 +364,18 @@ public class Joiner3NodeModel extends NodeModel {
     protected void saveInternals(final File nodeInternDir,
             final ExecutionMonitor exec) throws IOException,
             CanceledExecutionException {
-        NodeSettings internalSettings = new NodeSettings("joiner");
-        NodeSettingsWO leftMapSet =
-            internalSettings.addNodeSettings("leftHiliteMapping");
-        ((DefaultHiLiteMapper) m_leftTranslator.getMapper()).save(leftMapSet);
-
-        NodeSettingsWO rightMapSet =
-            internalSettings.addNodeSettings("rightHiliteMapping");
-        ((DefaultHiLiteMapper) m_rightTranslator.getMapper()).save(rightMapSet);
-
-        File f = new File(nodeInternDir, "joinerInternalSettings");
-        try(FileOutputStream out = new FileOutputStream(f)){
-            internalSettings.saveToXML(out);
-        }
+        // TODO restore
+//        NodeSettings internalSettings = new NodeSettings("joiner");
+//        NodeSettingsWO leftMapSet =
+//            internalSettings.addNodeSettings("leftHiliteMapping");
+//        ((DefaultHiLiteMapper) m_leftTranslator.getMapper()).save(leftMapSet);
+//        NodeSettingsWO rightMapSet =
+//            internalSettings.addNodeSettings("rightHiliteMapping");
+//        ((DefaultHiLiteMapper) m_rightTranslator.getMapper()).save(rightMapSet);
+//        File f = new File(nodeInternDir, "joinerInternalSettings");
+//        try(FileOutputStream out = new FileOutputStream(f)){
+//            internalSettings.saveToXML(out);
+//        }
     }
 
     /**

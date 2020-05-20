@@ -54,8 +54,8 @@ import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
-import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
 import org.knime.base.node.preproc.joiner3.implementation.CostModelFactory;
+import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataRow;
@@ -149,8 +149,8 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
             // joining on RowIDs, this should not generate new row IDs but
             // only fill missing rows in either table
             settings.setJoinMode(JoinMode.FullOuterJoin);
-            settings.setLeftIncludeAll(true);
-            settings.setRightIncludeAll(true);
+//            settings.setLeftIncludeAll(true);
+//            settings.setRightIncludeAll(true);
             // TODO to be replaced by Joiner2Settings.ROW_KEY_IDENTIFIER
             // once that is public
             settings.setLeftJoinColumns(new String[] {"$RowID$"});

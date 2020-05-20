@@ -232,8 +232,8 @@ public class HashJoin extends JoinImplementation {
                 updateProgress(exec, m_bigger, rowIndex);
 
                 for (DataRow match : matches) {
-                    DataRow outer = getOuter(row, match);
-                    DataRow inner = getInner(row, match);
+                    DataRow outer = getLeft(row, match);
+                    DataRow inner = getRight(row, match);
 
                     RowKey newRowKey = concatRowKeys(outer, inner);
                     result.addRowToTable(new JoinedRow(newRowKey, outer, inner));

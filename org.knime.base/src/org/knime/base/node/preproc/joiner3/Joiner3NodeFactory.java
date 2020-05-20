@@ -77,24 +77,28 @@ public class Joiner3NodeFactory extends ConfigurableNodeFactory<Joiner3NodeModel
     }
 
     // when changing any of these, change the group identifiers in the factory.xml as well.
-    private final static String outerGroupId = "Outer table";
-    private final static String innerGroupId = "Inner table";
-    private final static String additionalInnerGroupId = "Additional inner table";
-    private final static String resultId = "Join result";
+    private final static String OUTER_TABLE_PORT = "Outer table";
+    private final static String INNER_TABLE_PORT = "Inner table";
+    private final static String ADDITIONAL_INNER_TABLES_PORT_GROUP = "Additional inner table";
+    private final static String CORE_RESULT_PORT = "Join result";
+    final static String UNMATCHED_ROWS_OUTPUT_PORT_GROUP = "Unmatched rows";
 
     @Override
     protected Optional<PortsConfigurationBuilder> createPortsConfigBuilder() {
         PortsConfigurationBuilder b = new PortsConfigurationBuilder();
 
         // two mandatory inputs: outer and inner table
-        b.addFixedInputPortGroup(outerGroupId, BufferedDataTable.TYPE);
-        b.addFixedInputPortGroup(innerGroupId, BufferedDataTable.TYPE);
+        b.addFixedInputPortGroup(OUTER_TABLE_PORT, BufferedDataTable.TYPE);
+        b.addFixedInputPortGroup(INNER_TABLE_PORT, BufferedDataTable.TYPE);
 
         // optional additional input ports
-        b.addExtendableInputPortGroup(additionalInnerGroupId, BufferedDataTable.TYPE);
+        b.addExtendableInputPortGroup(ADDITIONAL_INNER_TABLES_PORT_GROUP, BufferedDataTable.TYPE);
 
-        // single output
-        b.addFixedOutputPortGroup(resultId, BufferedDataTable.TYPE);
+        // output for all rows or for inner join if routing unmatched rows to separate outputs
+        b.addFixedOutputPortGroup(CORE_RESULT_PORT, BufferedDataTable.TYPE);
+        // output ports for unmatched rows, only if outer join is active and the node is configured to send
+        // unmatched rows to separate output ports
+        b.addExtendableOutputPortGroup(UNMATCHED_ROWS_OUTPUT_PORT_GROUP, BufferedDataTable.TYPE);
 
         return Optional.of(b);
     }
