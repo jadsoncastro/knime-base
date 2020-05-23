@@ -212,7 +212,7 @@ public class HashJoin extends JoinImplementation {
 
         long rowIndex = 0;
 
-        try (CloseableRowIterator bigger = m_bigger.iterator()) {
+        try (CloseableRowIterator bigger = m_probe.iterator()) {
             while (bigger.hasNext()) {
                 DataRow row = bigger.next();
 
@@ -226,11 +226,11 @@ public class HashJoin extends JoinImplementation {
                     // this row from the bigger table has no matching row in the other table
                     // if we're performing an outer join, include the row in the result
                     // if we're performing an inner join, ignore the row
-                    unmatched.accept(m_bigger, row);
+                    unmatched.accept(m_probe, row);
                     continue;
                 }
 
-                updateProgress(exec, m_bigger, rowIndex);
+                updateProgress(exec, m_probe, rowIndex);
 
                 for (DataRow match : matches) {
                     DataRow outer = getLeft(row, match);
@@ -277,7 +277,7 @@ public class HashJoin extends JoinImplementation {
         long before = System.currentTimeMillis();
 
         //FIXME
-        HashIndex<JoinTuple> index = new HashIndex<>(m_smaller, null); //getExtractor(m_smaller));
+        HashIndex<JoinTuple> index = new HashIndex<>(m_hash, null); //getExtractor(m_smaller));
 
         long after = System.currentTimeMillis();
         System.out.println("Indexing: " + (after - before));

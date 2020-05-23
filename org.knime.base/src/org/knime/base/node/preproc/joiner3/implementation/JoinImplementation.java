@@ -55,10 +55,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
@@ -101,12 +101,12 @@ public abstract class JoinImplementation {
     protected Joiner3Settings m_settings;
 
     /**
-     * If true, {@link #m_bigger} references the outer table and {@link #m_smaller} references the inner table. If
+     * If true, {@link #m_probe} references the outer table and {@link #m_hash} references the inner table. If
      * false, it's the other way around.
      */
-    protected final boolean m_leftIsBigger;
+    protected final boolean m_outerIsProbe;
 
-    BufferedDataTable m_leftTable, m_rightTable;
+    BufferedDataTable m_outer, m_inner;
 
     /**
      * References the table (inner or outer) with fewer rows. This value is empty if tables do not provide row counts to
@@ -114,13 +114,13 @@ public abstract class JoinImplementation {
      *  TODO: make this probe input and hash input -- the smaller will usually be the hash input but
      * in streaming, we're forced to take what the users provides at the non-streaming input
      */
-    final BufferedDataTable m_smaller;
+    final BufferedDataTable m_hash;
 
     /**
      * References the table (either inner table or outer table) with more rows.
      * This value is empty if tables do not provide row counts to sort them by size.
      */
-    final BufferedDataTable m_bigger;
+    final BufferedDataTable m_probe;
 
     /** True for Left Outer Join and Full Outer Join. */
     boolean m_retainLeft;
@@ -169,6 +169,9 @@ public abstract class JoinImplementation {
     protected final DataTableSpec m_outputSpec;
 
     protected final Map<BufferedDataTable, TableSettings> m_tableSettings = new HashMap<>();
+
+    final TableSettings outerSettings, innerSettings;
+
     /**
      * @throws InvalidSettingsException
      *
@@ -178,10 +181,10 @@ public abstract class JoinImplementation {
         m_settings = settings;
 
         BufferedDataTable outer = tables[0];
-        m_leftTable = outer;
+        m_outer = outer;
 
         BufferedDataTable inner = tables[1];
-        m_rightTable = inner;
+        m_inner = inner;
 
         // this is write through, sorting the list sorts the array
         m_tables = Arrays.asList(tables);
@@ -189,22 +192,26 @@ public abstract class JoinImplementation {
         m_tables.sort(Comparator.comparingLong(BufferedDataTable::size).reversed());
 
         // TODO this can probably be removed
-        m_bigger = m_tables.get(0);
-        m_smaller = m_tables.get(1);
-        m_leftIsBigger = m_bigger == outer;
+        m_probe = m_tables.get(0);
+        m_hash = m_tables.get(1);
+        m_outerIsProbe = m_probe == outer;
+        boolean innerIsProbe = !m_outerIsProbe;
 
         // first table is the biggest
 
         // store join columns, include columns, etc. for each table
-        m_tableSettings.put(outer, new TableSettings(outer, Joiner3Settings::getLeftJoinColumns, Joiner3Settings::getLeftIncludeCols));
-        m_tableSettings.put(inner, new TableSettings(inner, Joiner3Settings::getRightJoinColumns, Joiner3Settings::getRightIncludeCols));
+        // store row offsets for the probe table
+        m_tableSettings.put(outer, new TableSettings(outer, m_settings.getLeftJoinColumns(), m_settings.getLeftIncludeCols(), m_outerIsProbe));
+        m_tableSettings.put(inner, new TableSettings(inner, m_settings.getRightJoinColumns(), m_settings.getRightIncludeCols(), innerIsProbe));
+        outerSettings = m_tableSettings.get(outer);
+        innerSettings = m_tableSettings.get(inner);
 
         m_runtimeWarnings = new ArrayList<String>();
 
         // FIXME multiple tables
 //        m_outputSpec = createSpec(Arrays.stream(tables).map(BufferedDataTable::getDataTableSpec).toArray(DataTableSpec[]::new));
         // TODO remove try catch fix error structure
-        m_outputSpec = Joiner.createOutputSpec(m_settings, s -> {}, m_leftTable.getSpec(), m_rightTable.getSpec());
+        m_outputSpec = Joiner.createOutputSpec(m_settings, s -> {}, m_outer.getSpec(), m_inner.getSpec());
 
     }
 
@@ -222,6 +229,8 @@ public abstract class JoinImplementation {
      *
      */
     class TableSettings{
+
+        final boolean storeRowOffsets;
 
         // original table
         // A B C D E F G   column names
@@ -290,6 +299,8 @@ public abstract class JoinImplementation {
         final DataTableSpec workingTableSpec;
 //        final String workingTableRowOffsetColumnName;
 
+        final int[] includeColumnsWorkingTable;
+
 
         /**
          * Drop columns that don't make it into the output early to save heap space and I/O when forced to flush rows to
@@ -298,14 +309,15 @@ public abstract class JoinImplementation {
          * @param forTable refers to the hash input table (or one of multiple hash input tables) or the probe input table
          * @return The spec of the given table filtered to included and join columns.
          */
-        TableSettings(final BufferedDataTable table, final Function<Joiner3Settings, String[]> getJoinColumns, final Function<Joiner3Settings, String[]> getIncludeColumns){
+        TableSettings(final BufferedDataTable table, final String[] joinClauses, final String[] includeColumnNames, final boolean storeRowOffsets){
 
             m_forTable = table;
+            this.storeRowOffsets = storeRowOffsets;
 
-            joinClauses = getJoinColumns.apply(m_settings);
+            this.joinClauses = joinClauses;
             Predicate<String> isJoinColumn = s -> Arrays.asList(joinClauses).contains(s);
-
             Predicate<String> isRowKey = m_settings.isRowKeyIndicator();
+            Predicate<String> isRowOffset = s -> ROW_OFFSET_COLUMN_NAME.equals(s);
 
             String[] joinColumnNames = Arrays.stream(joinClauses)
                     .distinct()
@@ -316,74 +328,39 @@ public abstract class JoinImplementation {
                     .toArray();
 
 
-            includeColumnNames = getIncludeColumns.apply(m_settings);
+            this.includeColumnNames = includeColumnNames;
             Predicate<String> isIncludedColumn = s -> Arrays.asList(includeColumnNames).contains(s);
 
             DataTableSpec spec = table.getDataTableSpec();
 
             List<DataColumnSpec> workingTableColumns = spec.stream()
                 .filter(col -> isIncludedColumn.or(isJoinColumn).test(col.getName())).collect(Collectors.toList());
-            // FIXME make sure this name is not taken
-            DataColumnSpec rowOffsetColumn = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
-            workingTableColumns.add(0, rowOffsetColumn);
+            if(storeRowOffsets) {
+                // FIXME make sure this name is not taken
+                DataColumnSpec rowOffsetColumn = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
+                workingTableColumns.add(0, rowOffsetColumn);
+            }
             workingTableSpec =
                 new DataTableSpec(workingTableColumns.toArray(new DataColumnSpec[workingTableColumns.size()]));
 
             workingTableColumnToSource =
-                workingTableSpec.stream().map(DataColumnSpec::getName).mapToInt(colName -> ROW_OFFSET_COLUMN_NAME.equals(colName)
-                    ? ROW_OFFSET_COLUMN_INDEX_INDICATOR : spec.findColumnIndex(colName)).toArray();
+                workingTableSpec.stream()
+                    .map(DataColumnSpec::getName)
+                    .filter(isRowOffset.negate())
+                    .mapToInt(spec::findColumnIndex).toArray();
+            assert Arrays.stream(workingTableColumnToSource).noneMatch(i -> i<0);
 
             joinColumnsWorkingTable = Arrays.stream(joinColumnNames)
                     .mapToInt(colName -> isRowKey.test(colName) ? ROW_KEY_COLUMN_INDEX_INDICATOR : workingTableSpec.findColumnIndex(colName))
-                    // if not found, it's the row key column
-//                    .map(idx -> idx == -1 ?  : idx)
                     .toArray();
 
+            includeColumnsWorkingTable = workingTableSpec.columnsToIndices(includeColumnNames);
 
             includeColumns = spec.columnsToIndices(includeColumnNames);
             materializeColumnIndices = IntStream
                 .concat(Arrays.stream(joinColumnsSource), Arrays.stream(includeColumns))
                 .distinct().filter(i -> i >= 0).sorted().toArray();
 
-//            retainColumnNames = Arrays.stream(includeColumnNames)
-//                    .filter(isJoinColumn.negate())
-//                    .toArray(String[]::new);
-//
-//            retainColumnsSource = Arrays.stream(retainColumnNames)
-//                    .mapToInt(table.getDataTableSpec()::findColumnIndex)
-//                    .toArray();
-//
-//            { //  build working table spec
-//
-//                List<String> wtsnames = Stream.concat(Arrays.stream(joinColumnNames), Arrays.stream(retainColumnNames))
-//                    .collect(Collectors.toList());
-//                DataColumnSpec rowKeyColumn =
-//                    (new DataColumnSpecCreator(m_settings.getRowKeyIndicator(), StringCell.TYPE)).createSpec();
-//                wtsnames.stream().map(colName -> isVirtualColumn.test(colName) ? rowKeyColumn
-//                    : table.getDataTableSpec().getColumnSpec(colName));
-//
-//
-//                // retain only the columns needed to perform the join and the columns that make it into the output
-//                List<DataColumnSpec> colSpecs = table.getDataTableSpec().stream()
-//                    .filter(colSpec -> isJoinColumn.or(isIncludedColumn).test(colSpec.getName()))
-//                    .collect(Collectors.toList());
-//
-//                // to sort according to natural join order, add a column that stores the row's offset in its source table
-//                workingTableRowOffsetColumnName = DataTableSpec.getUniqueColumnName(table.getDataTableSpec(), "row offset");
-//                colSpecs.add(new DataColumnSpecCreator(workingTableRowOffsetColumnName, LongCell.TYPE).createSpec());
-//
-
-//                workingTableSpec = new DataTableSpec(colSpecs.toArray(new DataColumnSpec[colSpecs.size()]));
-//
-//                // the columns offsets that make it into the reduced table
-////                = Arrays.stream(workingTableSpec.getColumnNames())
-////                    .filter(m_settings.isRowKeyIndicator().negate())
-////                    .mapToInt(table.getDataTableSpec()::findColumnIndex).toArray();
-//                workingTableJoinColumnIndices = IntStream.rangeClosed(1, joinColumnNames.length).toArray();
-//
-//                // the offsets of the included columns in the reduced table
-//                workingTableIncludeColumnIndices = workingTableSpec.columnsToIndices(includeColumnNames);
-//            }
         }
 
         /**
@@ -433,9 +410,12 @@ public abstract class JoinImplementation {
          */
         public DataRow workingRow(final long rowOffset, final DataRow fullRow) {
             DataCell[] cells = new DataCell[workingTableSpec.getNumColumns()];
-            cells[0] = new LongCell(rowOffset);
-            for (int i = 1; i < cells.length; i++) {
-                cells[i] = fullRow.getCell(workingTableColumnToSource[i]);
+            int cell = 0;
+            if(storeRowOffsets) {
+                cells[cell++] = new LongCell(rowOffset);
+            }
+            for (int i = 0; i < workingTableColumnToSource.length; i++) {
+                cells[cell++] = fullRow.getCell(workingTableColumnToSource[i]);
             }
             return new DefaultRow(fullRow.getKey(), cells);
         }
@@ -462,24 +442,29 @@ public abstract class JoinImplementation {
             return new JoinTuple(cells);
         }
 
+        /**
+         * @param innerSettings
+         * @return
+         */
+        DataTableSpec workingTableWith(final TableSettings innerSettings) {
+            return new DataTableSpec(Stream.concat(
+            workingTableSpec.stream(),
+            innerSettings.workingTableSpec.stream().skip(1))
+            .toArray(DataColumnSpec[]::new));
+        }
+
+        /**
+         * Contains probe row offset in first cell and the result columns
+         * @param innerSettings
+         * @return
+         */
+        DataTableSpec sortedChunksTableWith(final TableSettings innerSettings) {
+            // TODO factor out
+            DataColumnSpec rowOffset = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
+            return new DataTableSpec(Stream.concat(Stream.of(rowOffset), m_outputSpec.stream()).toArray(DataColumnSpec[]::new));
+        }
+
     }
-
-
-//
-//
-//    public int[] getJoinColumnIndices() {
-//        int numJoinAttributes = m_settings.getLeftJoinColumns().length;
-//        List<Integer> leftTableJoinIndices =
-//            new ArrayList<Integer>(numJoinAttributes);
-//        for (int i = 0; i < numJoinAttributes; i++) {
-//            String joinAttribute = m_settings.getLeftJoinColumns()[i];
-//            leftTableJoinIndices.add(
-//                    leftTable.getDataTableSpec().findColumnIndex(
-//                            joinAttribute));
-//        }
-//        return leftTableJoinIndices;
-//    }
-
 
     public abstract BufferedDataTable twoWayJoin(final ExecutionContext exec, final BufferedDataTable leftTable,
         final BufferedDataTable rightTable)
@@ -662,7 +647,7 @@ public abstract class JoinImplementation {
      * @return the row that belongs to the outer table.
      */
     protected DataRow getLeft(final DataRow probeRow, final DataRow hashRow) {
-        if (m_leftIsBigger) {
+        if (m_outerIsProbe) {
             return probeRow;
         } else {
             return hashRow;
@@ -675,7 +660,7 @@ public abstract class JoinImplementation {
      * @return the row that belongs to the inner table.
      */
     protected DataRow getRight(final DataRow probeRow, final DataRow hashRow) {
-        if (m_leftIsBigger) {
+        if (m_outerIsProbe) {
             return hashRow;
         } else {
             return probeRow;
