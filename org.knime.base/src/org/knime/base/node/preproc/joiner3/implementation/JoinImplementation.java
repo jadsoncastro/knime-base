@@ -62,7 +62,6 @@ import java.util.stream.IntStream;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpec;
@@ -73,6 +72,7 @@ import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.RowIterator;
 import org.knime.core.data.RowKey;
 import org.knime.core.data.def.DefaultCellIterator;
+import org.knime.core.data.def.DefaultRow;
 import org.knime.core.data.def.LongCell;
 import org.knime.core.data.def.StringCell;
 import org.knime.core.node.BufferedDataTable;
@@ -211,7 +211,9 @@ public abstract class JoinImplementation {
     /**
      * Where column indices are allowed, this one will indicate to use the row key.
      */
-    final static int ROW_KEY_COLUMN_INDEX_INDICATOR = -10;
+    final static int ROW_KEY_COLUMN_INDEX_INDICATOR = -1;
+    final static int ROW_OFFSET_COLUMN_INDEX_INDICATOR = -2;
+    final static String ROW_OFFSET_COLUMN_NAME = "$$ROW OFFSET$$";
 
     /**
      * Bundle included columns, join columns, etc. for a given input table.
@@ -226,39 +228,68 @@ public abstract class JoinImplementation {
         //   j   j j       join = [B, D, E], e.g., because join clauses are (D = ..., B = ..., B = ..., E = ..., Row Key = ...)
         // i i i   i       include = [A, B, C, E], because that's how the result is supposed to look like
         // r   r           retain = [A, C], because it's the included columns that are not join columns
-        // when having to go on disk, retaining only the
-        // working row layout is 1) long column for row offset 2) join columns + row key column 3) additional columns
 
-        // the idea behind reordering is to reuse the join tuple array (⌜ 2 ⌝)
+        //
+        //
+        // projection layout
+        // L A B C D E
+        // project down to join | include add row offset column at the beginning
+        //
+        // shuffle layout
+        // working row layout is 1) long column for row offset 2) join columns + row key column 3) additional columns
+        // the idea behind reordering is to reuse the join tuple array (⌜ 2 ⌝), which
         // - extracted to hash and determine partition, both for probe and hash
         // - stored in in-memory data structure
         //
-        // 1 ⌜  2  ⌝ ⌜3⌝
-        // L B D E R A C    working table column names
-        // 0 1 2 3 4 5 6    working table column indices
+        // 1 ⌜ 2 ⌝ ⌜3⌝
+        // L B D E A C    working table column names
+        // 0 1 2 3 4 5    working table column indices
         // look up columns for the join clauses [2, 1, 1, 3, 4]
         // look up columns for the include columns are [5, 1, 6, 3] (lookup from [A, B, C, E])
+        //
         final BufferedDataTable m_forTable;
 
-        // the names of this table's columns involved in join clauses; not unique
+        // the names of this table's columns involved in one side of the join predicates; not unique
+        // e.g., outertable.col2 = innertable.col3
+        //       outertable.col2 = innertable.col1
+        // would result in [col2, col2] in the outer table's joinClauses and [col3, col1] in the inner tables clauses
+
+        /** list of expressions (either a column name or Row Key); not unique */
         final String[] joinClauses;
-        // the set of columns indices to retain for checking whether a pair of rows matches; unique
-        final int[] joinColumnIndices;
-
-        // the names of the columns in the result table (doesn't have to cover join columns); unique
+//        /** column names (including virtual columns like $Row Key$) that are materialized in column group 2; unique */
+//        final String[] joinColumnNames;
+        /** where to get the join column values in the source table, might include negative values for $Row Key$; unique */
+        final int[] joinColumnsSource;
+//
+        /**
+         * Names of the columns to include in the result table; unique Doesn't have to cover join columns. The
+         * result table may also include columns from the other input table.
+         */
         final String[] includeColumnNames;
-        // the set of non-join column indices containing additional columns for the output; unique
-        final int[] retainColumnIndices;
+//        /** names of the columns in column set 3 */
+//        final String[] retainColumnNames;
+//        /** where to get columns of set 3 in the original table; unique */
+//        final int[] retainColumnsSource;
 
-        // defines which columns of the original table to materialize; join columns and retain columns
-        // e.g., hashInput.filter(TableFilter.materializeCols(workingColumns)).iterator()
-        final int[] workingTableColumnIndices;
+        /** Where to get the values of the included columns in the original table. */
+        final int[] includeColumns;
 
-        final int[] workingTableJoinColumnIndices;
-        final int[] workingTableIncludeColumnIndices;
+        /**
+         * Which columns of the original table to materialize; union of join columns and retain columns.
+         */
+        final int[] materializeColumnIndices;
+//
+//        /** */
+//        final int[] workingTableJoinColumnIndices;
+//        final int[] workingTableIncludeColumnIndices;
+        /** Where to get the working table column contents in the original table. */
+        final int[] workingTableColumnToSource;
+        /** Where to get the join column values in the working table, might include negative value for $Row Key$; */
+        final int[] joinColumnsWorkingTable;
 
         final DataTableSpec workingTableSpec;
-        final String workingTableRowOffsetColumnName;
+//        final String workingTableRowOffsetColumnName;
+
 
         /**
          * Drop columns that don't make it into the output early to save heap space and I/O when forced to flush rows to
@@ -267,49 +298,92 @@ public abstract class JoinImplementation {
          * @param forTable refers to the hash input table (or one of multiple hash input tables) or the probe input table
          * @return The spec of the given table filtered to included and join columns.
          */
-        TableSettings(final BufferedDataTable table, final Function<Joiner3Settings, String[]> joinColumns, final Function<Joiner3Settings, String[]> includeColumns){
+        TableSettings(final BufferedDataTable table, final Function<Joiner3Settings, String[]> getJoinColumns, final Function<Joiner3Settings, String[]> getIncludeColumns){
 
             m_forTable = table;
 
-            joinClauses = joinColumns.apply(m_settings);
+            joinClauses = getJoinColumns.apply(m_settings);
             Predicate<String> isJoinColumn = s -> Arrays.asList(joinClauses).contains(s);
 
-            joinColumnIndices = Arrays.stream(joinClauses)
-                    .filter(m_settings.isRowKeyIndicator().negate())
+            Predicate<String> isRowKey = m_settings.isRowKeyIndicator();
+
+            String[] joinColumnNames = Arrays.stream(joinClauses)
                     .distinct()
-                    .mapToInt(table.getDataTableSpec()::findColumnIndex).toArray();
-//            joinColumnIndicesWithIndicator = findJoinColumns(table.getDataTableSpec());
-
-            includeColumnNames = includeColumns.apply(m_settings);
-            Predicate<String> isIncludedColumn = s -> Arrays.asList(includeColumnNames).contains(s);
-
-            retainColumnIndices = Arrays.stream(includeColumnNames)
-                    .filter(isJoinColumn.negate())
-                    .mapToInt(table.getDataTableSpec()::findColumnIndex)
+                    .toArray(String[]::new);
+            joinColumnsSource = Arrays.stream(joinColumnNames)
+                    .mapToInt(colName -> isRowKey.test(colName) ? ROW_KEY_COLUMN_INDEX_INDICATOR
+                        : table.getDataTableSpec().findColumnIndex(colName))
                     .toArray();
 
-            { // determine which columns to keep in the working version of this table
 
-                // retain only the columns needed to perform the join and the columns that make it into the output
-                List<DataColumnSpec> colSpecs = table.getDataTableSpec().stream()
-                    .filter(colSpec -> isJoinColumn.or(isIncludedColumn).test(colSpec.getName()))
-                    .collect(Collectors.toList());
+            includeColumnNames = getIncludeColumns.apply(m_settings);
+            Predicate<String> isIncludedColumn = s -> Arrays.asList(includeColumnNames).contains(s);
 
-                // to sort according to natural join order, add a column that stores the row's offset in its source table
-                workingTableRowOffsetColumnName = DataTableSpec.getUniqueColumnName(table.getDataTableSpec(), "row offset");
-                colSpecs.add(new DataColumnSpecCreator(workingTableRowOffsetColumnName, LongCell.TYPE).createSpec());
+            DataTableSpec spec = table.getDataTableSpec();
 
-                workingTableColumnIndices = IntStream.concat(Arrays.stream(joinColumnIndices), Arrays.stream(retainColumnIndices)).toArray();
-                workingTableSpec = new DataTableSpec(colSpecs.toArray(new DataColumnSpec[colSpecs.size()]));
+            List<DataColumnSpec> workingTableColumns = spec.stream()
+                .filter(col -> isIncludedColumn.or(isJoinColumn).test(col.getName())).collect(Collectors.toList());
+            // FIXME make sure this name is not taken
+            DataColumnSpec rowOffsetColumn = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
+            workingTableColumns.add(0, rowOffsetColumn);
+            workingTableSpec =
+                new DataTableSpec(workingTableColumns.toArray(new DataColumnSpec[workingTableColumns.size()]));
 
-                // the columns offsets that make it into the reduced table
-//                = Arrays.stream(workingTableSpec.getColumnNames())
-//                    .filter(m_settings.isRowKeyIndicator().negate())
-//                    .mapToInt(table.getDataTableSpec()::findColumnIndex).toArray();
-                workingTableJoinColumnIndices = findJoinColumns(workingTableSpec);
-                // the offsets of the included columns in the reduced table
-                workingTableIncludeColumnIndices = workingTableSpec.columnsToIndices(includeColumnNames);
-            }
+            workingTableColumnToSource =
+                workingTableSpec.stream().map(DataColumnSpec::getName).mapToInt(colName -> ROW_OFFSET_COLUMN_NAME.equals(colName)
+                    ? ROW_OFFSET_COLUMN_INDEX_INDICATOR : spec.findColumnIndex(colName)).toArray();
+
+            joinColumnsWorkingTable = Arrays.stream(joinColumnNames)
+                    .mapToInt(colName -> isRowKey.test(colName) ? ROW_KEY_COLUMN_INDEX_INDICATOR : workingTableSpec.findColumnIndex(colName))
+                    // if not found, it's the row key column
+//                    .map(idx -> idx == -1 ?  : idx)
+                    .toArray();
+
+
+            includeColumns = spec.columnsToIndices(includeColumnNames);
+            materializeColumnIndices = IntStream
+                .concat(Arrays.stream(joinColumnsSource), Arrays.stream(includeColumns))
+                .distinct().filter(i -> i >= 0).sorted().toArray();
+
+//            retainColumnNames = Arrays.stream(includeColumnNames)
+//                    .filter(isJoinColumn.negate())
+//                    .toArray(String[]::new);
+//
+//            retainColumnsSource = Arrays.stream(retainColumnNames)
+//                    .mapToInt(table.getDataTableSpec()::findColumnIndex)
+//                    .toArray();
+//
+//            { //  build working table spec
+//
+//                List<String> wtsnames = Stream.concat(Arrays.stream(joinColumnNames), Arrays.stream(retainColumnNames))
+//                    .collect(Collectors.toList());
+//                DataColumnSpec rowKeyColumn =
+//                    (new DataColumnSpecCreator(m_settings.getRowKeyIndicator(), StringCell.TYPE)).createSpec();
+//                wtsnames.stream().map(colName -> isVirtualColumn.test(colName) ? rowKeyColumn
+//                    : table.getDataTableSpec().getColumnSpec(colName));
+//
+//
+//                // retain only the columns needed to perform the join and the columns that make it into the output
+//                List<DataColumnSpec> colSpecs = table.getDataTableSpec().stream()
+//                    .filter(colSpec -> isJoinColumn.or(isIncludedColumn).test(colSpec.getName()))
+//                    .collect(Collectors.toList());
+//
+//                // to sort according to natural join order, add a column that stores the row's offset in its source table
+//                workingTableRowOffsetColumnName = DataTableSpec.getUniqueColumnName(table.getDataTableSpec(), "row offset");
+//                colSpecs.add(new DataColumnSpecCreator(workingTableRowOffsetColumnName, LongCell.TYPE).createSpec());
+//
+
+//                workingTableSpec = new DataTableSpec(colSpecs.toArray(new DataColumnSpec[colSpecs.size()]));
+//
+//                // the columns offsets that make it into the reduced table
+////                = Arrays.stream(workingTableSpec.getColumnNames())
+////                    .filter(m_settings.isRowKeyIndicator().negate())
+////                    .mapToInt(table.getDataTableSpec()::findColumnIndex).toArray();
+//                workingTableJoinColumnIndices = IntStream.rangeClosed(1, joinColumnNames.length).toArray();
+//
+//                // the offsets of the included columns in the reduced table
+//                workingTableIncludeColumnIndices = workingTableSpec.columnsToIndices(includeColumnNames);
+//            }
         }
 
         /**
@@ -317,12 +391,12 @@ public abstract class JoinImplementation {
          * @param spec
          * @return
          */
-        int[] findJoinColumns(final DataTableSpec spec) {
-            return Arrays.stream(joinClauses).mapToInt(name -> {
-                int col = spec.findColumnIndex(name);
-                return m_settings.getRowKeyIndicator().equals(name) ? ROW_KEY_COLUMN_INDEX_INDICATOR : col;
-            }).toArray();
-        }
+//        int[] findJoinColumns(final DataTableSpec spec) {
+//            return Arrays.stream(joinClauses).mapToInt(name -> {
+//                int col = spec.findColumnIndex(name);
+//                return m_settings.getRowKeyIndicator().equals(name) ? ROW_KEY_COLUMN_INDEX_INDICATOR : col;
+//            }).toArray();
+//        }
 
         /**
          * Translate column names to column indices, use the special index {@link ROW_KEY_COLUMN_INDEX_INDICATOR} for
@@ -330,13 +404,25 @@ public abstract class JoinImplementation {
          * @param spec the spec in which to look up the names.
          * @return
          */
-        int[] joinColumnIndicesWithIndicator(final DataTableSpec spec) {
-            return Arrays.stream(joinClauses).mapToInt(name -> {
-                int col = spec.findColumnIndex(name);
-                return m_settings.getRowKeyIndicator().equals(name) ? ROW_KEY_COLUMN_INDEX_INDICATOR : col;
-            }).toArray();
+//        int[] joinColumnIndicesWithIndicator(final DataTableSpec spec) {
+//            return Arrays.stream(joinClauses).mapToInt(name -> {
+//                int col = spec.findColumnIndex(name);
+//                return m_settings.getRowKeyIndicator().equals(name) ? ROW_KEY_COLUMN_INDEX_INDICATOR : col;
+//            }).toArray();
+//        }
+//        int[] joinColumnIndicesWithIndicator() { return joinColumnIndicesWithIndicator(m_forTable.getDataTableSpec()); }
+        /**
+         * @param hashRow
+         * @return
+         */
+        public JoinTuple getJoinTuple(final DataRow hashRow) {
+            DataCell[] cells = new DataCell[joinColumnsSource.length];
+            for (int i = 0; i < cells.length; i++) {
+                cells[i] = joinColumnsSource[i] == ROW_KEY_COLUMN_INDEX_INDICATOR
+                    ? new StringCell(hashRow.getKey().getString()) : hashRow.getCell(joinColumnsSource[i]);
+            }
+            return new JoinTuple(cells);
         }
-        int[] joinColumnIndicesWithIndicator() { return joinColumnIndicesWithIndicator(m_forTable.getDataTableSpec()); }
 
 
         /**
@@ -345,9 +431,13 @@ public abstract class JoinImplementation {
          * @param fullRow
          * @return
          */
-        public WorkingRow workingRow(final long rowOffset, final DataRow fullRow) {
-            // TODO just move this?
-            return new WorkingRow(fullRow, joinColumnIndices, includeColumnIndices, rowOffset);
+        public DataRow workingRow(final long rowOffset, final DataRow fullRow) {
+            DataCell[] cells = new DataCell[workingTableSpec.getNumColumns()];
+            cells[0] = new LongCell(rowOffset);
+            for (int i = 1; i < cells.length; i++) {
+                cells[i] = fullRow.getCell(workingTableColumnToSource[i]);
+            }
+            return new DefaultRow(fullRow.getKey(), cells);
         }
 
         /**
@@ -356,9 +446,9 @@ public abstract class JoinImplementation {
          * @param table
          * @return
          */
-        protected JoinTuple getJoinTuple(final DataRow workingRow) {
+        protected JoinTuple getJoinTupleWorkingRow(final DataRow workingRow) {
             // TODO maybe implement a DataRow that allows to reuse the DataCell[] array that stores the join column values by internally concatenating them
-            int[] indices = workingTableJoinColumnIndices;
+            int[] indices = joinColumnsWorkingTable;
             DataCell[] cells = new DataCell[indices.length];
             for (int i = 0; i < cells.length; i++) {
                 if (indices[i] >= 0) {
@@ -371,32 +461,6 @@ public abstract class JoinImplementation {
             }
             return new JoinTuple(cells);
         }
-
-        /**
-        *
-        * @param table
-        * @return
-        */
-       protected Extractor getExtractor() {
-
-           final int[] indices = workingTableJoinColumnIndices;
-           return row -> {
-
-               final DataCell[] cells = new DataCell[indices.length];
-               // using a stream here would be more readable, but has severe performance costs
-               for (int i = 0; i < indices.length; i++) {
-                   if (indices[i] >= 0) {
-                       cells[i] = row.getCell(indices[i]);
-                   } else {
-                       // It is allowed to use the row ids to join tables.
-                       // However, row keys are not stored in a column of a table, so the convention
-                       // is used
-                       cells[i] = new StringCell(row.getKey().getString());
-                   }
-               }
-               return new JoinTuple(cells); //new JoinTuple(cells);
-           };
-       }
 
     }
 
