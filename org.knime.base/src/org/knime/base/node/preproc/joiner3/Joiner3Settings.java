@@ -781,4 +781,22 @@ public class Joiner3Settings {
     public String transformName(final DataTableSpec tableSpec, final String name) {
         return m_nameTransfomer.apply(tableSpec, name);
     }
+
+    /**
+     * This column name is used to indicate a join on a row key (which is not an actual column).
+     */
+    private final String DEFAULT_ROW_KEY_INDICATOR = "$RowID$";
+
+    public String getRowKeyIndicator() {
+        String indicator = DEFAULT_ROW_KEY_INDICATOR;
+        // add characters until column name is unique
+        while ((Arrays.asList(getLeftIncludeCols()).contains(indicator)
+            || Arrays.asList(getRightIncludeCols()).contains(indicator))) {
+            indicator = "$" + indicator + "$";
+        }
+        return indicator;
+    }
+    public Predicate<String> isRowKeyIndicator(){
+        return s -> getRowKeyIndicator().equals(s);
+    }
 }

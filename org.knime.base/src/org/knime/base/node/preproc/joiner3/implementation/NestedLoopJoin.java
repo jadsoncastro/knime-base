@@ -48,12 +48,7 @@
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
-import org.knime.base.data.join.JoinedTable;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
-import org.knime.core.data.DataRow;
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -98,59 +93,59 @@ public class NestedLoopJoin extends JoinImplementation {
     public BufferedDataTable twoWayJoin(final ExecutionContext exec,final BufferedDataTable rightTable,
         final BufferedDataTable leftTable)
         throws CanceledExecutionException, InvalidSettingsException {
-
-        // Update increment for reporting progress
-        double numPairs = leftTable.size() * rightTable.size();
-
-        // FIXME do the projections
-        DataTableSpec joinedTableSpec =
-            new JoinedTable(leftTable, rightTable, JoinedTable.METHOD_APPEND_SUFFIX, "_right", true).getDataTableSpec();
-        BufferedDataContainer result = exec.createDataContainer(joinedTableSpec);
-
-        Extractor smallerJoinAttributes = getExtractor(m_smaller);
-        Extractor biggerJoinAttributes = getExtractor(m_bigger);
-
-        long before = System.currentTimeMillis();
-
-        // cache right table
-        DataRow[] smallTableCached = new DataRow[m_smaller.getRowCount()];
-        int i = 0;
-        for (DataRow row : m_smaller) {
-            smallTableCached[i] = row;
-            i++;
-        }
-
-        long after = System.currentTimeMillis();
-        System.out.println("Caching: " + (after - before));
-        before = System.currentTimeMillis();
-
-        int counter = 0;
-
-        for (DataRow bigger : m_bigger) {
-
-            for (int j = 0; j < smallTableCached.length; j++) {
-                DataRow smaller = smallTableCached[j];
-
-                exec.getProgressMonitor().setProgress(1. * counter / numPairs);
-                exec.checkCanceled();
-
-                if (smallerJoinAttributes.apply(smaller).equals(biggerJoinAttributes.apply(bigger))) {
-                    DataRow outer = getLeft(bigger, smaller);
-                    DataRow inner = getRight(bigger, smaller);
-                    JoinedRow outputRow = new JoinedRow(outer, inner);
-                    result.addRowToTable(outputRow);
-                }
-
-                counter++;
-            }
-
-        }
-
-        after = System.currentTimeMillis();
-        System.out.println("Joining: " + (after - before));
-
-        result.close();
-        return result.getTable();
+        // FIXME
+        return null;
+//        // Update increment for reporting progress
+//        double numPairs = leftTable.size() * rightTable.size();
+//
+//        DataTableSpec joinedTableSpec =
+//            new JoinedTable(leftTable, rightTable, JoinedTable.METHOD_APPEND_SUFFIX, "_right", true).getDataTableSpec();
+//        BufferedDataContainer result = exec.createDataContainer(joinedTableSpec);
+//
+//        Extractor smallerJoinAttributes = getExtractor(m_smaller);
+//        Extractor biggerJoinAttributes = getExtractor(m_bigger);
+//
+//        long before = System.currentTimeMillis();
+//
+//        // cache right table
+//        DataRow[] smallTableCached = new DataRow[m_smaller.getRowCount()];
+//        int i = 0;
+//        for (DataRow row : m_smaller) {
+//            smallTableCached[i] = row;
+//            i++;
+//        }
+//
+//        long after = System.currentTimeMillis();
+//        System.out.println("Caching: " + (after - before));
+//        before = System.currentTimeMillis();
+//
+//        int counter = 0;
+//
+//        for (DataRow bigger : m_bigger) {
+//
+//            for (int j = 0; j < smallTableCached.length; j++) {
+//                DataRow smaller = smallTableCached[j];
+//
+//                exec.getProgressMonitor().setProgress(1. * counter / numPairs);
+//                exec.checkCanceled();
+//
+//                if (smallerJoinAttributes.apply(smaller).equals(biggerJoinAttributes.apply(bigger))) {
+//                    DataRow outer = getLeft(bigger, smaller);
+//                    DataRow inner = getRight(bigger, smaller);
+//                    JoinedRow outputRow = new JoinedRow(outer, inner);
+//                    result.addRowToTable(outputRow);
+//                }
+//
+//                counter++;
+//            }
+//
+//        }
+//
+//        after = System.currentTimeMillis();
+//        System.out.println("Joining: " + (after - before));
+//
+//        result.close();
+//        return result.getTable();
 
 
     }

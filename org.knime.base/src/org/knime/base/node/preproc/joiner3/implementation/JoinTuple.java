@@ -52,7 +52,7 @@ import java.util.Arrays;
 import org.knime.core.data.DataCell;
 
 /**
- * Two {@link InputRow} do join when two of there JoinTuples do match.
+ * Two {@link WorkingRow} do join when two of there JoinTuples do match.
  *
  * @author Heiko Hofer
  */

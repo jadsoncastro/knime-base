@@ -207,7 +207,8 @@ public class HashJoin extends JoinImplementation {
 
         before = System.currentTimeMillis();
 
-        Extractor biggerJoinAttributes = getExtractor(m_bigger);
+        // FIXME
+        Extractor biggerJoinAttributes = null; //getExtractor(m_bigger);
 
         long rowIndex = 0;
 
@@ -275,7 +276,8 @@ public class HashJoin extends JoinImplementation {
     private HashIndex<JoinTuple> buildIndex() {
         long before = System.currentTimeMillis();
 
-        HashIndex<JoinTuple> index = new HashIndex<>(m_smaller, getExtractor(m_smaller));
+        //FIXME
+        HashIndex<JoinTuple> index = new HashIndex<>(m_smaller, null); //getExtractor(m_smaller));
 
         long after = System.currentTimeMillis();
         System.out.println("Indexing: " + (after - before));
