@@ -51,7 +51,6 @@ package org.knime.base.node.preproc.joiner3.implementation;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -59,6 +58,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -75,7 +75,6 @@ import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.RowKey;
 import org.knime.core.data.append.AppendedColumnRow;
 import org.knime.core.data.container.CloseableRowIterator;
 import org.knime.core.data.container.DataContainer;
@@ -155,6 +154,7 @@ public class HybridHashJoin extends JoinImplementation {
     private BufferedDataTable hybridHashJoin(final ExecutionContext exec, final BufferedDataTable hashInput,
         final BufferedDataTable probeInput) throws CanceledExecutionException {
 
+        // the number of disk buckets is limited by the number of rows in the hash table (for each row, at most one bucket is migrated to disk)
         int numBuckets = m_settings.getMaxOpenFiles();
 
         // The row partitions of the hash input. Try to keep in memory, but put on disk if needed.
@@ -202,6 +202,7 @@ public class HybridHashJoin extends JoinImplementation {
                     // TODO 100ms could be too long -- continuing to fill the heap could cause an error
                     boolean someBucketsAreInMemory = firstInMemoryBucket < numBuckets;
                     // FIXME always swap out first ten buckets for testing
+//                    if(firstInMemoryBucket < numBuckets) {
                     if (progress.isMemoryLow(m_settings.getMemoryLimitPercent(), 100) && someBucketsAreInMemory) {
                         // migrate the next in-memory hash bucket to disk
                         hashBucketsOnDisk[firstInMemoryBucket] = hashBucketsInMemory[firstInMemoryBucket].toDisk(exec);
@@ -301,41 +302,91 @@ public class HybridHashJoin extends JoinImplementation {
 
             progress.setMessage("Phase 3/3: Processing data on disk");
 
-            BufferedDataContainer sortedOutput = exec.createDataContainer(outerSettings.sortedChunksTableWith(innerSettings));
-
             // we have k + 1 tables; one table for each of the k bucket pairs on disk + one (possibly empty) table from in-memory processing
             // since each table is sorted according to natural join order, we can do a k+1-way merge of the partial results.
 
-            BufferedDataTable[] sortedBuckets = new BufferedDataTable[firstInMemoryBucket + 1];
+            List<BufferedDataTable> sortedBuckets = new ArrayList<BufferedDataTable>(firstInMemoryBucket + 1);
+            sortedBuckets.add(inMemoryResults.getTable());
+
+            List<Long> probeBucketSizes = new ArrayList<>();
+            List<Long> hashBucketSizes = new ArrayList<>();
 
             // join only the pairs of buckets that haven't been processed in memory
             for (int i = 0; i < firstInMemoryBucket; i++) {
 
                 progress.incProgressAndCheckCanceled(0.16/firstInMemoryBucket);
+                // TODO remove
 
                 // obtain disk-based table handles for each bucket
-                sortedBuckets[i] = probeBuckets[i].join(hashBucketsOnDisk[i], this::joinWorkingRowToIntermediate, unmatchedProbeRow -> {}, unmatchedHashRow -> {}, exec);
+                Optional<BufferedDataTable> sortedChunk = probeBuckets[i].join(hashBucketsOnDisk[i], this::joinWorkingRowToIntermediate, unmatchedProbeRow -> {}, unmatchedHashRow -> {}, exec);
+                sortedChunk.ifPresent(sortedBuckets::add);
 
-            }
-
-            sortedBuckets[firstInMemoryBucket] = inMemoryResults.getTable();
-
-            // pour everything in one table
-            BufferedDataContainer finale = exec.createDataContainer(m_outputSpec);
-            DataTableSpec dataTableSpec = sortedBuckets[0].getDataTableSpec();
-            int[] allButFirst = IntStream.range(1, dataTableSpec.getNumColumns()).toArray();
-            for(BufferedDataTable partial : sortedBuckets) {
-                progress.incProgressAndCheckCanceled(0.16/firstInMemoryBucket);
-
-                try (CloseableRowIterator partialRows = partial.iterator()) {
-                    while (partialRows.hasNext()) {
-                        DataRow next = partialRows.next();
-                        FilterColumnRow finalRow = new FilterColumnRow(next, allButFirst);
-                        finale.addRowToTable(finalRow);
-                    }
+                if(sortedChunk.isPresent()){
+//                    System.out.println(String.format("Processing bucket pair %s", i));
+//                    System.out.println(String.format("Probe %7s | %-7s", probeBuckets[i].m_tablePartition.size(), hashBucketsOnDisk[i].m_tablePartition.size()));
+//                    System.out.println(String.format("Chunk result rows %s", sortedChunk.get().size()));
+                    probeBucketSizes.add(probeBuckets[i].m_tablePartition.size());
+                    hashBucketSizes.add(hashBucketsOnDisk[i].m_tablePartition.size());
                 }
 
             }
+
+
+            int skippedBucketPairs = firstInMemoryBucket + 1 - sortedBuckets.size();
+            System.out.println(String.format("Skipped %s bucket pairs because at least one bucket was empty.", skippedBucketPairs));
+            long sum = probeBucketSizes.stream().mapToLong(l -> l).sum();
+            final double mean = sum / probeBucketSizes.size();
+
+            final double sumOfSquares = probeBucketSizes.stream().mapToDouble(l -> Math.pow(l-mean, 2)).sum();
+            final double stdev = Math.sqrt(sumOfSquares / probeBucketSizes.size());
+            final double cov = stdev / mean;
+            System.out.println(String.format("Probebucket sizes: %s\n Mean: %.1f\nStdev: %.1f\n  CoV: %.1f", probeBucketSizes, mean, stdev, cov));
+
+
+            BufferedDataContainer finale = exec.createDataContainer(m_outputSpec);
+            DataTableSpec sortedChunkSpec = sortedBuckets.get(0).getDataTableSpec();
+            int[] allButFirst = IntStream.range(1, sortedChunkSpec.getNumColumns()).toArray();
+
+
+            PeekingIterator<DataRow>[] iterators = //new PeekingIterator[] {Iterators.peekingIterator(sortedBuckets[0].iterator())};
+                sortedBuckets.stream().map(BufferedDataTable::iterator).map(cri -> Iterators.peekingIterator(cri))
+                    .toArray(PeekingIterator[]::new);
+
+
+            Comparator<PeekingIterator<DataRow>> probeRowOffset = Comparator.comparingLong(pi -> pi.hasNext() ? ((LongCell) pi.peek().getCell(0)).getLongValue():-1);
+            boolean hasNext = false;
+            do {
+                Arrays.sort(iterators, probeRowOffset);
+                for (int i = 0; i < iterators.length; i++) {
+                    hasNext = false;
+                    if(!iterators[i].hasNext()) {
+                        continue;
+                    }
+                    long lastProbeRowOffset = ((LongCell) iterators[i].peek().getCell(0)).getLongValue();
+                    long nextProbeRowOffset;
+                    do {
+                        FilterColumnRow finalRow = new FilterColumnRow(iterators[i].next(), allButFirst);
+                        finale.addRowToTable(finalRow);
+                        nextProbeRowOffset = iterators[i].hasNext() ? ((LongCell) iterators[i].peek().getCell(0)).getLongValue() : -1;
+                    } while(nextProbeRowOffset == lastProbeRowOffset + 1);
+                    hasNext = hasNext | iterators[i].hasNext();
+                }
+//                for(PeekingIterator<DataRow> iterator:  iterators)
+            }while(hasNext);
+
+            // pour everything in one table
+//            for(BufferedDataTable partial : sortedBuckets) {
+//                progress.incProgressAndCheckCanceled(0.16/firstInMemoryBucket);
+//
+//                try (CloseableRowIterator partialRows = partial.iterator()) {
+//                    while (partialRows.hasNext()) {
+//                        DataRow next = partialRows.next();
+//                        FilterColumnRow finalRow = new FilterColumnRow(next, allButFirst);
+//                        finale.addRowToTable(finalRow);
+//                    }
+//                }
+//
+//            }
             finale.close();
             return finale.getTable();
 
@@ -350,36 +401,10 @@ public class HybridHashJoin extends JoinImplementation {
 
         static BufferedDataTable merge(final Comparator<WorkingRow> comparator, final BufferedDataTable[] sortedBuckets) {
 
-            // row offsets are contiguous, it's always clear which comes next
-            long nextRowOffset = 0;
-
-            // cycle over iterators
-            int nextIterator = 0;
-
-
-            PeekingIterator<WorkingRow>[] iterators = //new PeekingIterator[] {Iterators.peekingIterator(sortedBuckets[0].iterator())};
-            Arrays.stream(sortedBuckets).map(BufferedDataTable::iterator).map(cri -> Iterators.peekingIterator(cri)).toArray(PeekingIterator[]::new);
-
+            return null;
 //            PeekingIterator<DataRow>[] iterators = Arrays.stream(sortedBuckets)
 //                .map(BufferedDataTable::iterator).map(Iterators::<DataRow>peekingIterator).toArray(PeekingIterator[]::new);
 
-            BitSet iteratorsWithNext = new BitSet(iterators.length);
-            IntStream.range(0, iterators.length).filter(i -> iterators[i].hasNext())
-                .forEach(i -> iteratorsWithNext.set(i));
-
-            while (!iteratorsWithNext.isEmpty()) {
-
-                // rotate iterators until next row offset is found
-                int iteratorOffset = 0;
-                PeekingIterator<WorkingRow> it;
-                do {
-                    int next = iteratorsWithNext.nextSetBit(iteratorOffset);
-                    it = iterators[next];
-                    iteratorOffset = next;
-                } while (it.peek().getOuterRowIndex() != nextRowOffset);
-
-            }
-            return null;
         }
     }
 
@@ -469,26 +494,37 @@ public class HybridHashJoin extends JoinImplementation {
 
         }
 
-        RowKey newRowKey = concatRowKeys(outerRow, innerRow);
-
-        return new DefaultRow(newRowKey, dataCells);
+        // about the same speed
+//        String newRowKey = outerRow.getKey().getString().concat("_").concat(innerRow.getKey().getString());
+        return new DefaultRow(concatRowKeys(outerRow, innerRow), dataCells);
     }
 
     class DiskBucket {
         BufferedDataTable rows;
 
-        // working table spec: contains row offset if this is for the probe table + join + include columns
-        BufferedDataContainer m_container;
-
         final TableSettings tableSettings;
 
-        // stores a part of m_forTable on disk.
+        /**
+         * Buffer for flushing working rows to disk. Is null until the first row is added.
+         */
+        BufferedDataContainer m_container;
+
+        /**
+         * Table that contains a part of m_forTable. This is opened in phase 3 to read the rows written in phase 2 back
+         * from disk.
+         */
         BufferedDataTable m_tablePartition;
 
         DiskBucket(final BufferedDataTable forTable) {
             tableSettings = m_tableSettings.get(forTable);
         }
 
+        /**
+         * This is called in phase 2 to flush rows to disk that do not fit into memory.
+         * @param rowOffset
+         * @param row
+         * @param exec
+         */
         void add(final long rowOffset, final DataRow row, final ExecutionContext exec) {
             // lazy initialization of the data container, only when rows are actually added
             if (m_container == null) {
@@ -498,7 +534,20 @@ public class HybridHashJoin extends JoinImplementation {
         }
 
         /**
-         * Reads the working rows back from disk and outputs sorted chunk rows
+         * Called at the end of phase 2, after the last row has been added to the bucket.
+         */
+        void close() {
+            if(m_container != null) {
+                m_container.close();
+                m_tablePartition = m_container.getTable();
+                m_container = null;
+            }
+        }
+
+        /**
+         * Called during phase 3, to reads the working rows back from disk and outputs partial results in sorted chunk
+         * row format.
+         *
          * @param other
          * @param matches
          * @param unmatchedProbeRows
@@ -506,9 +555,14 @@ public class HybridHashJoin extends JoinImplementation {
          * @param exec
          * @return
          */
-        BufferedDataTable join(final DiskBucket other, final BiFunction<DataRow, DataRow, DataRow> matches,
+        Optional<BufferedDataTable> join(final DiskBucket other, final BiFunction<DataRow, DataRow, DataRow> matches,
             final Consumer<DataRow> unmatchedProbeRows, final Consumer<DataRow> unmatchedHashRows,
             final ExecutionContext exec) {
+
+            // this bucket has
+            if(m_tablePartition == null || other.m_tablePartition == null) {
+                return Optional.empty();
+            }
             BufferedDataTable probeBucket = m_tablePartition;
 
             BufferedDataTable hashBucket = other.m_tablePartition;
@@ -558,19 +612,8 @@ public class HybridHashJoin extends JoinImplementation {
             }
 
             result.close();
-            return result.getTable();
+            return Optional.of(result.getTable());
 
-        }
-
-        /**
-         * Called after the last row has been added to the bucket. Converts to a {@link BufferedDataTable} internally.
-         */
-        void close() {
-            if(m_container != null) {
-                m_container.close();
-                m_tablePartition = m_container.getTable();
-                m_container = null;
-            }
         }
 
         /**
@@ -737,7 +780,7 @@ public class HybridHashJoin extends JoinImplementation {
         public void setNumPartitionsOnDisk(final int n) {
             if (!m_recommendedUsingMoreMemory && n > 0) {
                 LOGGER.warn(String.format(
-                    "The smaller table is too large to execute the join in memory. Run KNIME with more main memory to speed up the join."));
+                    "Run KNIME with more main memory to speed up the join. The smaller table is too large to execute the join in memory. "));
                 m_recommendedUsingMoreMemory = true;
             }
             numHashPartitionsOnDisk = n;
