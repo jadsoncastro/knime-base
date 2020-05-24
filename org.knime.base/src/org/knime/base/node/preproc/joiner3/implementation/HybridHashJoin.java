@@ -201,7 +201,7 @@ public class HybridHashJoin extends JoinImplementation {
                     // if memory is running low and there are hash buckets in-memory
                     // TODO 100ms could be too long -- continuing to fill the heap could cause an error
                     boolean someBucketsAreInMemory = firstInMemoryBucket < numBuckets;
-                    // FIXME always swap out first ten buckets for testing
+                    // FIXME remove always to disk
 //                    if(firstInMemoryBucket < numBuckets) {
                     if (progress.isMemoryLow(m_settings.getMemoryLimitPercent(), 100) && someBucketsAreInMemory) {
                         // migrate the next in-memory hash bucket to disk
@@ -357,8 +357,8 @@ public class HybridHashJoin extends JoinImplementation {
             boolean hasNext = false;
             do {
                 Arrays.sort(iterators, probeRowOffset);
+                hasNext = false;
                 for (int i = 0; i < iterators.length; i++) {
-                    hasNext = false;
                     if(!iterators[i].hasNext()) {
                         continue;
                     }
@@ -385,8 +385,8 @@ public class HybridHashJoin extends JoinImplementation {
 //                        finale.addRowToTable(finalRow);
 //                    }
 //                }
-//
 //            }
+
             finale.close();
             return finale.getTable();
 
