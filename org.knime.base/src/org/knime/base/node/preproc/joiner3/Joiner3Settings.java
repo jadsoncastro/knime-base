@@ -72,7 +72,9 @@ import org.knime.core.node.util.ConvenienceMethods;
 /**
  * This class hold the settings for the joiner node.
  *
+ * @author Carl Witt, KNIME AG, Zurich, Switzerland
  * @author Heiko Hofer
+ * @since 4.2
  */
 public class Joiner3Settings {
 
@@ -112,6 +114,14 @@ public class Joiner3Settings {
 
     private static final String JOIN_ALGORITHM_KEY = "joinAlgorithm";
 
+
+    SettingsModelBoolean m_retainMatched = new SettingsModelBoolean("outputMatchingRows", true);
+
+    SettingsModelBoolean m_retainLeftUnmatched = new SettingsModelBoolean("outputLeftUnmatchedRows", true);
+
+    SettingsModelBoolean m_retainRightUnmatched = new SettingsModelBoolean("outputRightUnmatchedRows", true);
+
+
     private JoinerFactory.JoinAlgorithm m_joinAlgorithm = JoinerFactory.JoinAlgorithm.AUTO;
 
     /**
@@ -148,7 +158,7 @@ public class Joiner3Settings {
      *
      * @author Thorsten Meinl, University of Konstanz
      */
-    public enum DuplicateHandling {
+    public enum ColumnNameDisambiguation {
         /** Filter out duplicate columns from the second table. */
         Filter,
         /** Append a suffix to the columns from the second table. */
@@ -174,10 +184,10 @@ public class Joiner3Settings {
         /** Make a FULL OUTER JOIN. */
         FullOuterJoin("Full Outer Join");
 
-        private final String m_text;
+        private final String m_uiDisplayText;
 
-        private JoinMode(final String text) {
-            m_text = text;
+        private JoinMode(final String uiDisplayText) {
+            m_uiDisplayText = uiDisplayText;
         }
 
         /**
@@ -185,7 +195,24 @@ public class Joiner3Settings {
          */
         @Override
         public String toString() {
-            return m_text;
+            return m_uiDisplayText;
+        }
+    }
+
+    public enum SortMode {
+
+        None("None"),
+        Natural("Natural");
+
+        private final String m_uiDisplayText;
+
+        private SortMode(final String uiDisplayText) {
+            m_uiDisplayText = uiDisplayText;
+        }
+
+        @Override
+        public String toString() {
+            return m_uiDisplayText;
         }
     }
 
@@ -207,11 +234,12 @@ public class Joiner3Settings {
 
 
 
-    private DuplicateHandling m_duplicateHandling = DuplicateHandling.AppendSuffixAutomatic;
+    private ColumnNameDisambiguation m_duplicateHandling = ColumnNameDisambiguation.AppendSuffixAutomatic;
 
     private String m_duplicateColSuffix = "(*)";
 
     private JoinMode m_joinMode = JoinMode.InnerJoin;
+    private SortMode m_sortMode = SortMode.Natural;
 
     private String[] m_leftJoinColumns = new String[0];
     private String[] m_rightJoinColumns = new String[0];
@@ -244,7 +272,7 @@ public class Joiner3Settings {
                 "Number of columns selected from the top table and from " + "the bottom table do not match");
         }
 
-        if (getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)
+        if (getDuplicateHandling().equals(ColumnNameDisambiguation.AppendSuffix)
             && (getDuplicateColumnSuffix() == null || getDuplicateColumnSuffix().isEmpty())) {
             throw new InvalidSettingsException("No suffix for duplicate columns provided");
         }
@@ -485,7 +513,7 @@ public class Joiner3Settings {
      *
      * @return the duplicate handling method
      */
-    public DuplicateHandling getDuplicateHandling() {
+    public ColumnNameDisambiguation getDuplicateHandling() {
         return m_duplicateHandling;
     }
 
@@ -495,7 +523,7 @@ public class Joiner3Settings {
      * @param duplicateHandling the duplicate handling method
      */
     public void setDuplicateHandling(
-            final DuplicateHandling duplicateHandling) {
+            final ColumnNameDisambiguation duplicateHandling) {
         m_duplicateHandling = duplicateHandling;
     }
 
@@ -515,6 +543,7 @@ public class Joiner3Settings {
      */
     public void setJoinMode(final JoinMode joinMode) {
         m_joinMode = joinMode;
+        System.out.println(m_joinMode);
     }
 
     /**
@@ -652,11 +681,11 @@ public class Joiner3Settings {
         m_unmatchedRowsToSeparateOutputPort.loadSettingsFrom(settings);
 
         m_duplicateHandling =
-                DuplicateHandling.valueOf(settings
+                ColumnNameDisambiguation.valueOf(settings
                         .getString(DUPLICATE_COLUMN_HANDLING));
         if (m_version.equals(VERSION_2)
-                && m_duplicateHandling.equals(DuplicateHandling.AppendSuffix)) {
-            m_duplicateHandling = DuplicateHandling.AppendSuffixAutomatic;
+                && m_duplicateHandling.equals(ColumnNameDisambiguation.AppendSuffix)) {
+            m_duplicateHandling = ColumnNameDisambiguation.AppendSuffixAutomatic;
         }
         m_compositionMode =
             CompositionMode.valueOf(settings.getString(COPOSITION_MODE));
@@ -696,10 +725,10 @@ public class Joiner3Settings {
             System.err.println(e.getLocalizedMessage());
         }
 
-        m_duplicateHandling = DuplicateHandling
-            .valueOf(settings.getString(DUPLICATE_COLUMN_HANDLING, DuplicateHandling.AppendSuffix.toString()));
-        if (m_version.equals(VERSION_2) && m_duplicateHandling.equals(DuplicateHandling.AppendSuffix)) {
-            m_duplicateHandling = DuplicateHandling.AppendSuffixAutomatic;
+        m_duplicateHandling = ColumnNameDisambiguation
+            .valueOf(settings.getString(DUPLICATE_COLUMN_HANDLING, ColumnNameDisambiguation.AppendSuffix.toString()));
+        if (m_version.equals(VERSION_2) && m_duplicateHandling.equals(ColumnNameDisambiguation.AppendSuffix)) {
+            m_duplicateHandling = ColumnNameDisambiguation.AppendSuffixAutomatic;
         }
         m_compositionMode =
             CompositionMode.valueOf(settings.getString(COPOSITION_MODE, CompositionMode.MatchAll.toString()));
@@ -798,5 +827,20 @@ public class Joiner3Settings {
     }
     public Predicate<String> isRowKeyIndicator(){
         return s -> getRowKeyIndicator().equals(s);
+    }
+
+    /**
+     * @return
+     */
+    public SortMode getSortMode() {
+        return m_sortMode;
+    }
+
+    /**
+     * @param selectedItem
+     */
+    public void setSortMode(final SortMode selectedItem) {
+        m_sortMode = selectedItem;
+
     }
 }

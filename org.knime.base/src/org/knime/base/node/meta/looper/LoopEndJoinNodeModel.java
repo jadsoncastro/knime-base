@@ -52,7 +52,7 @@ import java.io.IOException;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.ColumnNameDisambiguation;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
 import org.knime.base.node.preproc.joiner3.implementation.CostModelFactory;
 import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
@@ -144,7 +144,7 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
             Joiner3Settings settings = new Joiner3Settings();
             settings.setCompositionMode(CompositionMode.MatchAll);
             settings.setDuplicateColumnSuffix(" (Iter #" + m_iteration + ")");
-            settings.setDuplicateHandling(DuplicateHandling.AppendSuffix);
+            settings.setDuplicateHandling(ColumnNameDisambiguation.AppendSuffix);
             settings.setEnableHiLite(false);
             // joining on RowIDs, this should not generate new row IDs but
             // only fill missing rows in either table
@@ -159,8 +159,7 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
             BufferedDataTable right = copy(inData[0], true,
                     exec.createSubExecutionContext(0.1));
             JoinImplementation joiner = CostModelFactory.create(settings, left, right);
-            m_currentAppendTable = joiner.twoWayJoin(exec.createSubExecutionContext(0.9), left,
-                    right);
+            m_currentAppendTable = joiner.twoWayJoin(exec.createSubExecutionContext(0.9));
         }
         m_iteration += 1;
         if (continueLoop) {

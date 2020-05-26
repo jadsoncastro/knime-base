@@ -263,7 +263,7 @@ public class Joiner {
         // TODO reuse old data if only minor changes in settings
         m_joinStrategy = settings.getJoinAlgorithm().getFactory().create(settings, tables);
 
-        return m_joinStrategy.twoWayJoin(exec, tables[0], tables[1]);
+        return m_joinStrategy.twoWayJoin(exec);
     }
 
     /**

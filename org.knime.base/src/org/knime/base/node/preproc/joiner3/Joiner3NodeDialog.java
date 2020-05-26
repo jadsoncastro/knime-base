@@ -71,8 +71,9 @@ import javax.swing.SwingConstants;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.ColumnNameDisambiguation;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.SortMode;
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory.JoinAlgorithm;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataTableSpec;
@@ -95,7 +96,7 @@ import org.knime.core.node.util.ColumnPairsSelectionPanel;
  *
  * @author Heiko Hofer
  */
-public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog {
+class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog {
     private final JComboBox<JoinMode> m_joinMode =
             new JComboBox<>(new JoinMode[]{JoinMode.InnerJoin,
                     JoinMode.LeftOuterJoin, JoinMode.RightOuterJoin,
@@ -137,8 +138,16 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
     private JRadioButton m_matchAnyButton = new JRadioButton(
             "Match any of the following");
 
-    private DialogComponentBoolean unmatchedRowsToSeparateOutputPort = new DialogComponentBoolean(m_settings.m_unmatchedRowsToSeparateOutputPort, "Separate Output Ports for Unmatched Rows");
+
+    private DialogComponentBoolean m_retainMatched = new DialogComponentBoolean(m_settings.m_retainMatched, "Matching rows");
+    private DialogComponentBoolean m_retainLeftUnmatched = new DialogComponentBoolean(m_settings.m_retainLeftUnmatched, "Unmatched rows from top input port");
+    private DialogComponentBoolean m_retainRightUnmatched = new DialogComponentBoolean(m_settings.m_retainRightUnmatched, "Unmatched rows from bottom input port");
+    private DialogComponentBoolean m_unmatchedRowsToSeparateOutputPort = new DialogComponentBoolean(m_settings.m_unmatchedRowsToSeparateOutputPort, "Separate Output Ports for Unmatched Rows");
+
     private DialogComponentNumber memoryLimitPercent = new DialogComponentNumber(m_settings.m_memoryLimitPercentSettingsModel, "Maximum Heap Memory Usage %", 1);
+//    private DialogComponentBoolean deterministicOutputOrder = new DialogComponentBoolean(m_settings.m_deterministicOutputOrder, "Sort output rows");
+    private final JComboBox<SortMode> m_sortMode =
+            new JComboBox<>(new SortMode[]{SortMode.Natural, SortMode.None});
 
     private final JTextField m_maxOpenFiles = new JTextField();
     private final JTextField m_rowKeySeparator = new JTextField();
@@ -282,24 +291,57 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
 
     }
 
-    /**
-     * @return the join mode panel
-     * @since 2.12
-     * @noreference This method is not intended to be referenced by clients.
-     */
-    protected JPanel createJoinModeUIControls() {
+    private JPanel createJoinModeUIControls() {
         JPanel p = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
 
-        c.fill = GridBagConstraints.HORIZONTAL;
+//        c.fill = GridBagConstraints.HORIZONTAL;
         c.anchor = GridBagConstraints.NORTHWEST;
         c.insets = new Insets(2, 2, 2, 2);
         c.gridx = 0;
         c.gridy = 0;
 
-        p.add(new JLabel("Join mode  ", SwingConstants.RIGHT), c);
-        c.gridx++;
-        p.add(m_joinMode, c);
+//        final JLabel m_joinModeName = new JLabel("Join mode ");
+//        p.add(m_joinModeName, c);
+
+//        c.gridy++;
+//        p.add(m_retainMatched.getComponentPanel());
+
+//        c.gridx++;
+//        p.add(m_retainLeftUnmatched.getComponentPanel());
+//
+//        c.gridx++;
+//        p.add(m_retainRightUnmatched.getComponentPanel());
+
+        c.gridy++;
+        p.add(m_unmatchedRowsToSeparateOutputPort.getComponentPanel());
+
+
+//        ChangeListener joinMode = e -> {
+//            // match left right | name
+//            //   F     F    F     no output
+//            //   F     F    T     ?
+//            //   F     T    F
+//            //   T     F    F
+//            final String mode = m_retainLeftUnmatched.isSelected() && m_retainRightUnmatched.isSelected() ? "Full Outer Join" :
+//                (m_retainLeftUnmatched.isSelected() ? "Left Outer Join" :
+//                    (m_retainRightUnmatched.isSelected() ? "Right Outer Join" : "Inner Join"));
+//
+//            m_joinModeName.setText(mode);
+//        };
+//        m_retainMatched.getModel().addChangeListener(joinMode);
+//        m_retainLeftUnmatched.getModel().addChangeListener(joinMode);
+//        m_retainRightUnmatched.getModel().addChangeListener(joinMode);
+
+//        p.add(new JLabel("Join mode  ", SwingConstants.RIGHT), c);
+//        c.gridx++;
+//        p.add(m_joinMode, c);
+//        c.gridy++;
+        c.gridy++;
+        p.add(m_joinMode,c);
+        c.gridy++;
+        p.add(m_sortMode, c);
+
         c.gridy++;
         p.add(new JLabel("Join algorithm ", SwingConstants.RIGHT), c);
         c.gridx++;
@@ -329,8 +371,6 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
         c.gridy++;
         c.gridwidth = 2;
         p.add(m_enableHiLite, c);
-        c.gridy++;
-        p.add(unmatchedRowsToSeparateOutputPort.getComponentPanel());
         c.gridy++;
         p.add(memoryLimitPercent.getComponentPanel());
 
@@ -462,6 +502,7 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
         m_settings.loadSettingsForDialog(settings);
 
         m_joinMode.setSelectedItem(m_settings.getJoinMode());
+        m_sortMode.setSelectedItem(m_settings.getSortMode());
         m_joinAlgorithm.setSelectedItem(m_settings.getJoinAlgorithm());
 
         m_matchAllButton.setSelected(m_settings.getCompositionMode().equals(
@@ -475,17 +516,17 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
                 m_settings.getRightJoinColumns());
 
         m_filterDuplicates.setSelected(m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.Filter));
+                ColumnNameDisambiguation.Filter));
         m_dontExecute.setSelected(m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.DontExecute));
+                ColumnNameDisambiguation.DontExecute));
         m_appendSuffixAutomatic.setSelected(m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.AppendSuffixAutomatic));
+                ColumnNameDisambiguation.AppendSuffixAutomatic));
         m_appendSuffix.setSelected(m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.AppendSuffix));
+                ColumnNameDisambiguation.AppendSuffix));
 
         m_suffix.setText(m_settings.getDuplicateColumnSuffix());
         m_suffix.setEnabled(m_settings.getDuplicateHandling().equals(
-                DuplicateHandling.AppendSuffix));
+                ColumnNameDisambiguation.AppendSuffix));
 
         m_leftFilterPanel.update(specs[0], false,
                 m_settings.getLeftIncludeCols());
@@ -510,6 +551,7 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
     protected void saveSettingsTo(final NodeSettingsWO settings)
             throws InvalidSettingsException {
         m_settings.setJoinMode((JoinMode)m_joinMode.getSelectedItem());
+        m_settings.setSortMode((SortMode)m_sortMode.getSelectedItem());
         m_settings.setJoinAlgorithm((JoinAlgorithm) m_joinAlgorithm.getSelectedItem());
 
         if (m_matchAllButton.isSelected()) {
@@ -552,16 +594,16 @@ public class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNod
         m_settings.setRightJoinColumns(rs);
 
         if (m_filterDuplicates.isSelected()) {
-            m_settings.setDuplicateHandling(DuplicateHandling.Filter);
+            m_settings.setDuplicateHandling(ColumnNameDisambiguation.Filter);
         } else if (m_dontExecute.isSelected()) {
-            m_settings.setDuplicateHandling(DuplicateHandling.DontExecute);
+            m_settings.setDuplicateHandling(ColumnNameDisambiguation.DontExecute);
         } else if (m_appendSuffixAutomatic.isSelected()) {
             m_settings.setDuplicateHandling(
-                DuplicateHandling.AppendSuffixAutomatic);
+                ColumnNameDisambiguation.AppendSuffixAutomatic);
         } else {
             String suffix = m_suffix.getText().trim().isEmpty() ? ""
                     : m_suffix.getText();
-            m_settings.setDuplicateHandling(DuplicateHandling.AppendSuffix);
+            m_settings.setDuplicateHandling(ColumnNameDisambiguation.AppendSuffix);
             m_settings.setDuplicateColumnSuffix(suffix);
         }
         m_settings.setVersion(Joiner3Settings.VERSION_3);

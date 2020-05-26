@@ -81,17 +81,13 @@ public class NestedLoopJoin extends JoinImplementation {
     /**
      * Joins the <code>leftTable</code> and the <code>rightTable</code>.
      * @param exec The Execution monitor for this execution.
-     * @param leftTable The left input table.
-     * @param rightTable The right input table.
      * @param joiner TODO
-     *
      * @return The joined table.
      * @throws CanceledExecutionException when execution is canceled
      * @throws InvalidSettingsException when inconsistent settings are provided
      */
     @Override
-    public BufferedDataTable twoWayJoin(final ExecutionContext exec,final BufferedDataTable rightTable,
-        final BufferedDataTable leftTable)
+    public BufferedDataTable twoWayJoin(final ExecutionContext exec)
         throws CanceledExecutionException, InvalidSettingsException {
         // FIXME
         return null;

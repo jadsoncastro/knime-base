@@ -56,6 +56,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
@@ -134,13 +136,13 @@ public class HashJoin extends JoinImplementation {
     //    }
 
     @Override
-    public BufferedDataTable twoWayJoin(final ExecutionContext exec, final BufferedDataTable leftTable,
-        final BufferedDataTable rightTable) throws CanceledExecutionException, InvalidSettingsException {
+    public BufferedDataTable twoWayJoin(final ExecutionContext exec) throws CanceledExecutionException, InvalidSettingsException {
 
         RowHandler unmatchedRowHandler =
             m_settings.getJoinMode() == JoinMode.InnerJoin ? IGNORE_ROW : this::handleUnmatched;
 
-        return _twoWayJoin_(exec, leftTable, rightTable, unmatchedRowHandler);
+        // FIXME
+        return null; //_twoWayJoin_(exec, unmatchedRowHandler);
 
     }
 
@@ -181,8 +183,10 @@ public class HashJoin extends JoinImplementation {
         //---------------------------------------------
 
         exec.setProgress("Building Hash Table");
+        // FIXME swapping tables
+        Map<JoinTuple, List<DataRow>> index = StreamSupport.stream(leftTable.spliterator(), false)
+                .collect(Collectors.groupingBy(m_tableSettings.get(rightTable)::getJoinTupleWorkingRow));
 
-        HashIndex<JoinTuple> index = buildIndex();
 
         //---------------------------------------------
         // build table spec
@@ -270,23 +274,6 @@ public class HashJoin extends JoinImplementation {
         //        return sorted;
     }
 
-    /**
-     * @return
-     */
-    private HashIndex<JoinTuple> buildIndex() {
-        long before = System.currentTimeMillis();
-
-        //FIXME
-        HashIndex<JoinTuple> index = new HashIndex<>(m_hash, null); //getExtractor(m_smaller));
-
-        long after = System.currentTimeMillis();
-        System.out.println("Indexing: " + (after - before));
-        return index;
-    }
-
-//    private DataRow createMatchRow() {
-//
-//    }
 
     private void addUnmatchedRows(final BufferedDataContainer result) {
 
@@ -339,10 +326,6 @@ public class HashJoin extends JoinImplementation {
     protected StreamableFunction getStreamableFunction() {
         return new StreamableFunction() {
 
-            // constructor
-            {
-                HashIndex<JoinTuple> index = buildIndex();
-            }
             @Override
             public DataRow compute(final DataRow input) throws Exception {
 

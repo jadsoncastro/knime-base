@@ -61,8 +61,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.DuplicateHandling;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.ColumnNameDisambiguation;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
@@ -168,9 +167,9 @@ public abstract class JoinImplementation {
 
     protected final DataTableSpec m_outputSpec;
 
-    protected final Map<BufferedDataTable, TableSettings> m_tableSettings = new HashMap<>();
+    protected final Map<BufferedDataTable, JoinTableSettings> m_tableSettings = new HashMap<>();
 
-    final TableSettings outerSettings, innerSettings;
+    final JoinTableSettings outerSettings, innerSettings;
 
     /**
      * @throws InvalidSettingsException
@@ -201,8 +200,8 @@ public abstract class JoinImplementation {
 
         // store join columns, include columns, etc. for each table
         // store row offsets for the probe table
-        m_tableSettings.put(outer, new TableSettings(outer, m_settings.getLeftJoinColumns(), m_settings.getLeftIncludeCols(), m_outerIsProbe));
-        m_tableSettings.put(inner, new TableSettings(inner, m_settings.getRightJoinColumns(), m_settings.getRightIncludeCols(), innerIsProbe));
+        m_tableSettings.put(outer, new JoinTableSettings(outer, m_settings.getLeftJoinColumns(), m_settings.getLeftIncludeCols(), m_outerIsProbe));
+        m_tableSettings.put(inner, new JoinTableSettings(inner, m_settings.getRightJoinColumns(), m_settings.getRightIncludeCols(), innerIsProbe));
         outerSettings = m_tableSettings.get(outer);
         innerSettings = m_tableSettings.get(inner);
 
@@ -228,7 +227,7 @@ public abstract class JoinImplementation {
      * @author Carl Witt, KNIME AG, Zurich, Switzerland
      *
      */
-    class TableSettings{
+    class JoinTableSettings{
 
         final boolean storeRowOffsets;
 
@@ -309,7 +308,7 @@ public abstract class JoinImplementation {
          * @param forTable refers to the hash input table (or one of multiple hash input tables) or the probe input table
          * @return The spec of the given table filtered to included and join columns.
          */
-        TableSettings(final BufferedDataTable table, final String[] joinClauses, final String[] includeColumnNames, final boolean storeRowOffsets){
+        JoinTableSettings(final BufferedDataTable table, final String[] joinClauses, final String[] includeColumnNames, final boolean storeRowOffsets){
 
             m_forTable = table;
             this.storeRowOffsets = storeRowOffsets;
@@ -446,7 +445,7 @@ public abstract class JoinImplementation {
          * @param innerSettings
          * @return
          */
-        DataTableSpec workingTableWith(final TableSettings innerSettings) {
+        DataTableSpec workingTableWith(final JoinTableSettings innerSettings) {
             return new DataTableSpec(Stream.concat(
             workingTableSpec.stream(),
             innerSettings.workingTableSpec.stream().skip(1))
@@ -458,7 +457,7 @@ public abstract class JoinImplementation {
          * @param innerSettings
          * @return
          */
-        DataTableSpec sortedChunksTableWith(final TableSettings innerSettings) {
+        DataTableSpec sortedChunksTableWith(final JoinTableSettings innerSettings) {
             // TODO factor out
             DataColumnSpec rowOffset = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
             return new DataTableSpec(Stream.concat(Stream.of(rowOffset), m_outputSpec.stream()).toArray(DataColumnSpec[]::new));
@@ -466,8 +465,7 @@ public abstract class JoinImplementation {
 
     }
 
-    public abstract BufferedDataTable twoWayJoin(final ExecutionContext exec, final BufferedDataTable leftTable,
-        final BufferedDataTable rightTable)
+    public abstract BufferedDataTable twoWayJoin(final ExecutionContext exec)
         throws CanceledExecutionException, InvalidSettingsException;
 
     @Deprecated
@@ -496,32 +494,6 @@ public abstract class JoinImplementation {
         return rightTableJoinIndices;
     }
 
-    JoinedRowKeyFactory createRowKeyFactory(final DataTable leftTable, final DataTable rightTable) {
-
-        if (useSingleRowKeyFactory(leftTable, rightTable)) {
-            // This is the special case of row key match row key
-            return new UseSingleRowKeyFactory();
-        } else {
-            return new ConcatenateJoinedRowKeyFactory(m_settings.getRowKeySeparator());
-        }
-    }
-
-    /**
-     * Gives true when the SingleRowKeyFactory should be used.
-     */
-    private boolean useSingleRowKeyFactory(final DataTable leftTable, final DataTable rightTable) {
-        List<Integer> leftTableJoinIndices = getLeftJoinIndices(leftTable);
-        List<Integer> rightTableJoinIndices = getRightJoinIndices(rightTable);
-
-        boolean joinRowIdsOnly = true;
-        boolean joinRowIds = false;
-        for (int i = 0; i < leftTableJoinIndices.size(); i++) {
-            joinRowIdsOnly = joinRowIdsOnly && leftTableJoinIndices.get(i) == -1 && rightTableJoinIndices.get(i) == -1;
-            joinRowIds = joinRowIds || (leftTableJoinIndices.get(i) == -1 && rightTableJoinIndices.get(i) == -1);
-        }
-        return joinRowIdsOnly || (joinRowIds && !m_matchAny && m_settings.getJoinMode().equals(JoinMode.InnerJoin)
-            && m_settings.useEnhancedRowIdHandling());
-    }
 
     /**
      * Validates the settings in the passed <code>NodeSettings</code> object. The specified settings is checked for
@@ -547,7 +519,7 @@ public abstract class JoinImplementation {
                 "Number of columns selected from the top table and from " + "the bottom table do not match");
         }
 
-        if (s.getDuplicateHandling().equals(DuplicateHandling.AppendSuffix)
+        if (s.getDuplicateHandling().equals(ColumnNameDisambiguation.AppendSuffix)
             && (s.getDuplicateColumnSuffix() == null || s.getDuplicateColumnSuffix().isEmpty())) {
             throw new InvalidSettingsException("No suffix for duplicate columns provided");
         }

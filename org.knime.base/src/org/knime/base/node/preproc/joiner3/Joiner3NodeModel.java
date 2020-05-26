@@ -88,7 +88,7 @@ import org.knime.core.node.streamable.simple.SimpleStreamableOperatorInternals;
  *
  * @author Heiko Hofer
  */
-public class Joiner3NodeModel extends NodeModel {
+class Joiner3NodeModel extends NodeModel {
 
     private final Joiner3Settings m_settings = new Joiner3Settings();
 
