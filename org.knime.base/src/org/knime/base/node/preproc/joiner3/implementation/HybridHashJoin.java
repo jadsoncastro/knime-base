@@ -57,6 +57,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import javax.management.InstanceNotFoundException;
@@ -65,6 +67,8 @@ import javax.management.ObjectName;
 
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
+import org.knime.base.node.preproc.joiner3.implementation.HybridHashJoin.DiskBackedTablePartitioner.DiskBucket;
+import org.knime.base.node.preproc.joiner3.implementation.HybridHashJoin.DiskBackedTablePartitioner.HashIndex;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.container.CloseableRowIterator;
 import org.knime.core.data.container.filter.TableFilter;
@@ -76,6 +80,7 @@ import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeProgressMonitor;
 import org.knime.core.node.streamable.StreamableFunction;
+import org.knime.core.util.Pair;
 
 /**
  *
@@ -86,7 +91,7 @@ import org.knime.core.node.streamable.StreamableFunction;
  * The algorithm proceeds in three phases:
  * <ol>
  * <li>Single pass over the smaller table (hash input), which is partitioned and indexed in memory. If memory runs low,
- * partitions are flushed to disk. See {@link InMemoryBucket#toDisk(ExecutionContext)}.</li>
+ * partitions are flushed to disk. See {@link HashIndex#toDisk(ExecutionContext)}.</li>
  * <li>Single pass over the bigger table (probe input). Rows that hash to a partition whose counterpart is held in
  * memory are processed directly. Other rows are flushed to disk.</li>
  * <li>Load and join matching partitions that have been flushed to disk.</li>
@@ -104,18 +109,16 @@ public class HybridHashJoin extends JoinImplementation {
 
 
     /**
-     * References the table (inner or outer) with fewer rows. This value is empty if tables do not provide row counts to
-     * sort them by size.
-     *  TODO: make this probe input and hash input -- the smaller will usually be the hash input but
-     * in streaming, we're forced to take what the users provides at the non-streaming input
+     * References the table (left table or right table) with fewer rows or the input table that is not streamable.
      */
     final BufferedDataTable m_hash;
 
     /**
-     * References the table (either inner table or outer table) with more rows.
-     * This value is empty if tables do not provide row counts to sort them by size.
+     * References the table (either left table or right table) with more rows or the input table that is streamable.
      */
     final BufferedDataTable m_probe;
+
+    ExecutionContext exec;
 
     /**
      * @param settings
@@ -125,12 +128,303 @@ public class HybridHashJoin extends JoinImplementation {
     protected HybridHashJoin(final Joiner3Settings settings, final BufferedDataTable[] tables) {
         super(settings, tables);
 
+        // TODO what if more than two tables are passed?
+
         boolean leftIsBigger =
             m_tableSettings.get(m_left).materializedCells > m_tableSettings.get(m_right).materializedCells;
         m_probe = leftIsBigger ? m_left : m_right;
         m_hash = leftIsBigger ? m_right : m_left;
         //        BufferedDataTable probeInput = leftIsBigger ? m_left : m_right;
         //        BufferedDataTable hashInput = leftIsBigger ? m_right : m_left;
+
+    }
+
+    class DiskBackedTablePartitioner {
+
+        final int numPartitions;
+
+        int firstInMemoryHashBucket;
+
+        final boolean m_storeHashRowOffsets;
+
+        private final HashIndex[] hashBucketsInMemory;
+
+        private final DiskBucket[] hashBucketsOnDisk;
+
+        public DiskBackedTablePartitioner(final BufferedDataTable hashInput, final boolean storeHashRowOffsets) {
+
+            m_storeHashRowOffsets = storeHashRowOffsets;
+
+            // we create two files per hash bucket, one for the hash input partition and one for the probe input partition
+            // note that the effective number of buckets is limited by the number of rows in the hash table (for each row, at most one bucket is migrated to disk)
+            numPartitions = m_settings.getMaxOpenFiles() / 2;
+
+            hashBucketsInMemory = Stream.generate(() -> new HashIndex(m_tableSettings.get(hashInput)))
+                .limit(numPartitions).toArray(HashIndex[]::new);
+
+            // the buckets of the hash input are kept in memory for offsets firstInMemoryBucket...numBuckets-1
+            // the offsets 0...firstInMemoryBucket-1 are stored on disk.
+            firstInMemoryHashBucket = 0;
+
+            hashBucketsOnDisk = new DiskBucket[numPartitions];
+        }
+
+        public void flushNextBucket() {
+            // migrate the next in-memory hash bucket to disk
+            hashBucketsOnDisk[firstInMemoryHashBucket] = hashBucketsInMemory[firstInMemoryHashBucket].toDisk(exec, m_storeHashRowOffsets);
+            // in memory bucket is never needed again
+            hashBucketsInMemory[firstInMemoryHashBucket] = null;
+            firstInMemoryHashBucket++;
+
+        }
+
+        /**
+         * Compute a partition based on the values in a row's join columns.
+         * @param joinAttributeValues
+         * @return
+         */
+        public int partition(final Object joinAttributeValues) {
+            return Math.abs(joinAttributeValues.hashCode() % numPartitions);
+        }
+
+        /**
+         * @return the number of hash buckets that are currently held in memory.
+         */
+        public int getNumInMemoryParititions() {
+            return numPartitions - firstInMemoryHashBucket;
+        }
+
+        /**
+         * @return the number of partitions that stored on disk.
+         */
+        public int getNumPartitionsOnDisk() {
+            return firstInMemoryHashBucket;
+        }
+
+        /**
+         * @param rowOffset
+         * @param joinAttributeValues
+         * @param hashRow
+         */
+        public void addHash(final long rowOffset, final JoinTuple joinAttributeValues, final DataRow hashRow) {
+            int partition = partition(joinAttributeValues);
+
+            if (partition >= firstInMemoryHashBucket) {
+                // if the hash bucket is in memory, add and index row
+                hashBucketsInMemory[partition].add(rowOffset, joinAttributeValues, hashRow);
+            } else {
+                // if the bucket is on disk store for joining later
+                // hash rows don't need a row offset, they are already sorted.
+                hashBucketsOnDisk[partition].add(rowOffset, hashRow, exec);
+            }
+        }
+
+        /**
+         * Signal that we're done processing hash input rows.
+         */
+        public void closeHashBuckets() {
+            Arrays.stream(hashBucketsOnDisk).filter(Objects::nonNull).forEach(DiskBucket::close);
+        }
+
+        /**
+         * @param partition
+         * @return
+         */
+        public boolean hashInMemory(final int partition) {
+            return partition >= firstInMemoryHashBucket;
+        }
+
+        /**
+         * @param partition
+         * @return
+         */
+        public HashIndex getInMemoryBucket(final int partition) {
+            return hashBucketsInMemory[partition];
+        }
+
+        /**
+         * @return
+         */
+        public List<Pair<Integer, DiskBucket>> unprocessedBuckets() {
+            return IntStream.range(0, firstInMemoryHashBucket)
+                .mapToObj(partition -> new Pair<Integer, DiskBucket>(partition, hashBucketsOnDisk[partition]))
+                .collect(Collectors.toList());
+        }
+
+        DataRow workingRow(final long rowOffset, final DataRow row) {
+            return null;
+        }
+
+        class HashIndex {
+
+            final JoinTableSettings m_tableSettings;
+
+            List<DataRow> m_rows = new ArrayList<>();
+            // TODO this should be an intarraylist
+            List<Long> m_rowOffsets;
+
+            HashMap<JoinTuple, List<DataRow>> m_index = new HashMap<>();
+
+            HashIndex(final JoinTableSettings tableSettings) {
+                m_tableSettings = tableSettings;
+            }
+
+            /**
+             * @param joinAttributeValues
+             * @param probeRow
+             * @param inMemoryResults
+             */
+            public void joinSingleRow(final JoinTuple joinAttributeValues, final DataRow probeRow, final JoinContainer joinContainer) {
+
+                List<DataRow> matching = m_index.get(joinAttributeValues);
+
+                if (matching == null) {
+                    // this row from the bigger table has no matching row in the other table
+                    // if we're performing an outer join, include the row in the result
+                    // if we're performing an inner join, ignore the row
+                    //                unmatched.accept(m_bigger, row);
+                    // TODO outer join
+
+                    if(m_probe == m_left) {
+                        joinContainer.addLeftOuter(probeRow);
+                    } else {
+                        joinContainer.addRightOuter(probeRow);
+                    }
+
+                } else {
+
+                    for (DataRow hashRow : matching) {
+                        DataRow left = m_probe == m_left ? probeRow : hashRow;
+                        DataRow right = m_probe == m_right ? probeRow : hashRow;
+                        joinContainer.addMatch(left, right);
+                    }
+                }
+            }
+
+            public void add(final long rowOffset, final JoinTuple joinAttributes, final DataRow row) {
+
+                m_index.computeIfAbsent(joinAttributes, k -> new LinkedList<DataRow>()).add(row);
+
+                if(m_storeHashRowOffsets) {
+                    if(m_rowOffsets == null) {
+                        m_rowOffsets = new ArrayList<>();
+                    }
+                    m_rowOffsets.add(rowOffset);
+                }
+                m_rows.add(row);
+            }
+
+            /**
+             * Only hash buckets can go to disk, probe rows are put into DiskBuckets directly
+             * @param exec
+             * @param storeHashRowOffsets
+             * @return
+             */
+            DiskBucket toDisk(final ExecutionContext exec, final boolean storeHashRowOffsets) {
+
+                // release memory
+                m_index = null;
+
+                DiskBucket result = new DiskBucket(m_tableSettings);
+
+                // this should be an IntIterator
+                Iterator<Long> rowOffsets = m_storeHashRowOffsets ? m_rowOffsets.iterator() : null;
+
+                for (Iterator<DataRow> rows = m_rows.iterator(); rows.hasNext();) {
+                    if(m_storeHashRowOffsets) {
+                        result.add(rowOffsets.next(), rows.next(), exec);
+                    } else {
+                        result.add(-1, rows.next(), exec);
+                    }
+                    // free memory from the in-memory data structure
+                    rows.remove();
+
+                }
+
+                return result;
+            }
+
+        }
+
+
+        class DiskBucket {
+
+            final JoinTableSettings joinTable;
+            Optional<JoinTableSettings> workingTable = Optional.empty();
+
+            /**
+             * Buffer for flushing working rows to disk. Is null until the first row is added.
+             */
+            BufferedDataContainer m_container = null;
+
+            /**
+             * Is created in {@link #close()} if at least one row has been added. The table contains a subset of the rows of
+             * the table this bucket is created for {@link JoinTableSettings#m_forTable}.</br>
+             * A disk buckets is used in phase 3 to read the rows that have been written to disk in phase 2 back into
+             * memory.
+             */
+            Optional<BufferedDataTable> m_tablePartition = Optional.empty();
+
+            DiskBucket(final JoinTableSettings forTable) {
+                joinTable = forTable;
+            }
+
+            /**
+             * @param diskBucket
+             * @param outputContainer
+             * @param createSubExecutionContext
+             */
+            public void joinStream(final DiskBucket diskBucket, final JoinContainer outputContainer,
+                final ExecutionContext createSubExecutionContext) {
+                // TODO Auto-generated method stub
+
+            }
+
+            /**
+             * This is called in phase 2 to flush rows to disk that do not fit into memory.
+             * @param rowOffset
+             * @param row
+             * @param exec
+             */
+            void add(final long rowOffset, final DataRow row, final ExecutionContext exec) {
+                // lazy initialization of the data container, only when rows are actually added
+                if (m_container == null) {
+                    m_container = exec.createDataContainer(joinTable.workingTableSpec);
+                }
+                m_container.addRowToTable(workingRow(rowOffset, row));
+            }
+
+            /**
+             * Called at the end of phase 2, after the last row has been added to the bucket.
+             */
+            void close() {
+                if(m_container != null) {
+                    m_container.close();
+                    m_tablePartition = Optional.of(m_container.getTable());
+                    workingTable = Optional.of(joinTable.workingTableSettings(m_tablePartition.get()));
+                    m_container = null;
+                }
+            }
+
+            /**
+             * Called during phase 3, to reads the working rows back from disk and outputs partial results in sorted chunk
+             * row format.
+             * @throws CanceledExecutionException
+             */
+            void join(final DiskBucket other, final JoinContainer container, final ExecutionContext exec) throws CanceledExecutionException {
+
+                // if either bucket is empty, we're done joining those buckets.
+                if (!workingTable.isPresent() || !other.workingTable.isPresent()) {
+                    return;
+                }
+
+                // perform an in-memory join that falls back to nested loop (a recursive hybrid hash join would fail if
+                // partitioning doesn't help to reduce problem size, e.g., due to joining a constant column)
+                HashJoin.withFallback(workingTable.get(), other.workingTable.get(), container, exec);
+
+            }
+
+        }
 
     }
 
@@ -152,27 +446,17 @@ public class HybridHashJoin extends JoinImplementation {
         BufferedDataTable hashInput = m_hash;
         BufferedDataTable probeInput = m_probe;
 
-        // we create two files per hash bucket, one for the hash input partition and one for the probe input partition
-        // note that the effective number of buckets is limited by the number of rows in the hash table (for each row, at most one bucket is migrated to disk)
-        int numBuckets = m_settings.getMaxOpenFiles() / 2;
+        // we need the offsets of the hash rows if we want to output unmatched rows for the hash input table
+        boolean storeHashRowOffsets = m_tableSettings.get(hashInput).retainUnmatched;
 
-        // The row partitions of the hash input. Try to keep in memory, but put on disk if needed.
-        // hashBucketsInMemory[i] == null indicates that the bucket is on disk.
-        InMemoryBucket[] hashBucketsInMemory = Stream.generate(() -> new InMemoryBucket(m_tableSettings.get(hashInput)))
-            .limit(numBuckets).toArray(InMemoryBucket[]::new);
+        DiskBackedTablePartitioner partitioner = new DiskBackedTablePartitioner(hashInput, storeHashRowOffsets);
 
-        // the buckets of the hash input are kept in memory for offsets firstInMemoryBucket...numBuckets-1
-        // the offsets 0...firstInMemoryBucket-1 are stored on disk.
-        int firstInMemoryBucket = 0;
+        // TODO clean this up
+        this.exec = exec;
 
-        // The row partitions of the hash input that have been migrated to disk due to low heap space.
-        // Are initialized as soon as migration to disk is necessary.
-        // TODO maybe make a list out of this
-        DiskBucket[] hashBucketsOnDisk = new DiskBucket[numBuckets];
-
-        // TODO null remove
+        // TODO remove null parameter
         progress = progress == null ? new ProgressMonitor(exec, null)  : progress;
-        progress.numBuckets = numBuckets;
+        progress.numBuckets = partitioner.numPartitions;
 
         { // phase 1: partition the hash input into buckets, keep as many buckets as possible in memory
 
@@ -191,43 +475,29 @@ public class HybridHashJoin extends JoinImplementation {
 
                     // if memory is running low and there are hash buckets in-memory
                     // TODO 100ms could be too long -- continuing to fill the heap could cause an error
-                    boolean someBucketsAreInMemory = firstInMemoryBucket < numBuckets;
                     boolean memoryLow = progress.isMemoryLow(m_settings.getMemoryLimitPercent(), 100);
-                    if (memoryLow && someBucketsAreInMemory) {
-                        // migrate the next in-memory hash bucket to disk
-                        hashBucketsOnDisk[firstInMemoryBucket] = hashBucketsInMemory[firstInMemoryBucket].toDisk(exec);
-                        // in memory bucket is never needed again
-                        hashBucketsInMemory[firstInMemoryBucket] = null;
-                        firstInMemoryBucket++;
-                        progress.setNumPartitionsOnDisk(firstInMemoryBucket);
+                    if (memoryLow && partitioner.getNumInMemoryParititions() > 0) {
+                        partitioner.flushNextBucket();
+                        progress.setNumPartitionsOnDisk(partitioner.getNumPartitionsOnDisk());
                     }
 
                     DataRow hashRow = hashRows.next();
                     JoinTuple joinAttributeValues = tableSettings.getJoinTuple(hashRow);
-                    int bucket = Math.abs(joinAttributeValues.hashCode() % numBuckets);
-
-                    if (bucket >= firstInMemoryBucket) {
-                        // if the hash bucket is in memory, add and index row
-                        hashBucketsInMemory[bucket].add(rowOffset, joinAttributeValues, hashRow);
-                    } else {
-                        // if the bucket is on disk store for joining later
-                        // hash rows don't need a row offset, they are already sorted.
-                        hashBucketsOnDisk[bucket].add(rowOffset, hashRow, exec);
-                    }
+                    partitioner.addHash(rowOffset, joinAttributeValues, hashRow);
 
                     rowOffset++;
                 } // all hash input rows processed
             } // close hash input row iterator
 
             // hash input has been processed completely, close buckets that have been migrated to disk (ideally none)
-            Arrays.stream(hashBucketsOnDisk).filter(Objects::nonNull).forEach(DiskBucket::close);
+            partitioner.closeHashBuckets();
 
         } // phase 1: index building
 
         // if the hash input fits in memory, we can (stream) process the probe input in a single pass
         // if not, some rows from the probe input will be written to disk and final result will need sorting to
         // deliver a deterministic output order that does not depend on how much buckets we were able to hold in memory
-        boolean allInMemory = firstInMemoryBucket == 0;
+        boolean allInMemory = partitioner.getNumInMemoryParititions() == partitioner.numPartitions;
 
         // this table spec is either
         // - the output spec (contains left included columns + right included columns)
@@ -239,10 +509,11 @@ public class HybridHashJoin extends JoinImplementation {
         boolean sortable  = !allInMemory && m_settings.isDeterministicOutputOrder();
         JoinContainer inMemoryResults = new JoinContainer(leftSettings, rightSettings, exec, sortable);
 
-        // Row partitions of the probe input. A bucket r is only used if the corresponding hash input bucket s can
+        // Row partitions of the probe input. A bucket r is only used if the corresponding hash input buckets can
         // not be held in main memory. The bucket pair (r, s) is then retrieved from disk later and joined in memory.
-        DiskBucket[] probeBuckets = Stream.generate(() -> new DiskBucket(m_tableSettings.get(probeInput)))
-            .limit(numBuckets).toArray(DiskBucket[]::new);
+        // TODO internalize in partitioner?
+        DiskBucket[] probeBuckets = Stream.generate(() -> partitioner.new DiskBucket(m_tableSettings.get(probeInput)))
+            .limit(partitioner.numPartitions).toArray(DiskBucket[]::new);
 
         { // phase 2: partitioning and probing of the probe input
 
@@ -266,15 +537,15 @@ public class HybridHashJoin extends JoinImplementation {
                     DataRow probeRow = probeRows.next();
 
                     JoinTuple joinAttributeValues = tableSettings.getJoinTuple(probeRow);
-                    int bucket = Math.abs(joinAttributeValues.hashCode() % numBuckets);
+                    int partition = partitioner.partition(joinAttributeValues);
 
-                    if (bucket >= firstInMemoryBucket) {
+                    if (partitioner.hashInMemory(partition)) {
                         // if hash bucket is in memory, output result directly
-                        hashBucketsInMemory[bucket].joinSingleRow(joinAttributeValues, probeRow, inMemoryResults);
+                        partitioner.getInMemoryBucket(partition).joinSingleRow(joinAttributeValues, probeRow, inMemoryResults);
                         progress.incProbeRowsProcessedInMemory();
                     } else {
                         // if hash bucket is on disk, process this row later, when joining the matching buckets
-                        probeBuckets[bucket].add(rowOffset, probeRow, exec);
+                        probeBuckets[partition].add(rowOffset, probeRow, exec);
                         progress.incProbeRowsProcessedFromDisk();
                     }
                     rowOffset++;
@@ -298,12 +569,13 @@ public class HybridHashJoin extends JoinImplementation {
 
             // since each table is sorted according to natural join order, we can do a n-way merge of the partial results
             progress.setMessage("Phase 3/3: Processing data on disk");
-            progress.setBucketSizes(probeBuckets, hashBucketsOnDisk);
-
+            progress.setBucketSizes(probeBuckets, partitioner.hashBucketsOnDisk);
 
             // join the pairs of buckets that haven't been processed in memory
-            for (int i = 0; i < firstInMemoryBucket; i++) {
-                probeBuckets[i].join(hashBucketsOnDisk[i], inMemoryResults, exec);
+            for(Pair<Integer, DiskBucket> hashBucket : partitioner.unprocessedBuckets()) {
+                int partition = hashBucket.getFirst();
+                DiskBucket hashBucketOnDisk = hashBucket.getSecond();
+                probeBuckets[partition].join(hashBucketOnDisk, inMemoryResults, exec);
                 inMemoryResults.sortedChunkEnd();
             }
 
@@ -313,84 +585,6 @@ public class HybridHashJoin extends JoinImplementation {
 
     }
 
-    class DiskBucket {
-
-        final JoinTableSettings joinTable;
-        Optional<JoinTableSettings> workingTable = Optional.empty();
-
-        /**
-         * Buffer for flushing working rows to disk. Is null until the first row is added.
-         */
-        BufferedDataContainer m_container = null;
-
-        /**
-         * Is created in {@link #close()} if at least one row has been added. The table contains a subset of the rows of
-         * the table this bucket is created for {@link JoinTableSettings#m_forTable}.</br>
-         * A disk buckets is used in phase 3 to read the rows that have been written to disk in phase 2 back into
-         * memory.
-         */
-        Optional<BufferedDataTable> m_tablePartition = Optional.empty();
-
-        DiskBucket(final JoinTableSettings forTable) {
-            joinTable = forTable;
-        }
-
-        /**
-         * @param diskBucket
-         * @param outputContainer
-         * @param createSubExecutionContext
-         */
-        public void joinStream(final DiskBucket diskBucket, final JoinContainer outputContainer,
-            final ExecutionContext createSubExecutionContext) {
-            // TODO Auto-generated method stub
-
-        }
-
-        /**
-         * This is called in phase 2 to flush rows to disk that do not fit into memory.
-         * @param rowOffset
-         * @param row
-         * @param exec
-         */
-        void add(final long rowOffset, final DataRow row, final ExecutionContext exec) {
-            // lazy initialization of the data container, only when rows are actually added
-            if (m_container == null) {
-                m_container = exec.createDataContainer(joinTable.workingTableSpec);
-            }
-            m_container.addRowToTable(joinTable.workingRow(rowOffset, row));
-        }
-
-        /**
-         * Called at the end of phase 2, after the last row has been added to the bucket.
-         */
-        void close() {
-            if(m_container != null) {
-                m_container.close();
-                m_tablePartition = Optional.of(m_container.getTable());
-                workingTable = Optional.of(joinTable.workingTableSettings(m_tablePartition.get()));
-                m_container = null;
-            }
-        }
-
-        /**
-         * Called during phase 3, to reads the working rows back from disk and outputs partial results in sorted chunk
-         * row format.
-         * @throws CanceledExecutionException
-         */
-        void join(final DiskBucket other, final JoinContainer container, final ExecutionContext exec) throws CanceledExecutionException {
-
-            // if either bucket is empty, we're done joining those buckets.
-            if (!workingTable.isPresent() || !other.workingTable.isPresent()) {
-                return;
-            }
-
-            // perform an in-memory join that falls back to nested loop (a recursive hybrid hash join would fail if
-            // partitioning doesn't help to reduce problem size, e.g., due to joining a constant column)
-            HashJoin.withFallback(workingTable.get(), other.workingTable.get(), container, exec);
-
-        }
-
-    }
 
 //    static class OrderedDataRow {
 //        DataRow row;
@@ -403,78 +597,6 @@ public class HybridHashJoin extends JoinImplementation {
 //
 //    }
 
-    class InMemoryBucket {
-
-        final JoinTableSettings m_tableSettings;
-
-        List<DataRow> m_rows = new ArrayList<>();
-        // TODO this should be an intarraylist
-//        List<Long> m_rowOffsets = new ArrayList<>();
-
-        HashMap<JoinTuple, List<DataRow>> m_index = new HashMap<>();
-
-        InMemoryBucket(final JoinTableSettings tableSettings) {
-            m_tableSettings = tableSettings;
-        }
-
-        /**
-         * @param joinAttributeValues
-         * @param probeRow
-         * @param inMemoryResults
-         */
-        public void joinSingleRow(final JoinTuple joinAttributeValues, final DataRow probeRow, final JoinContainer joinContainer) {
-
-            List<DataRow> matching = m_index.get(joinAttributeValues);
-
-            if (matching == null) {
-                // this row from the bigger table has no matching row in the other table
-                // if we're performing an outer join, include the row in the result
-                // if we're performing an inner join, ignore the row
-                //                unmatched.accept(m_bigger, row);
-                // TODO outer join
-            } else {
-
-                for (DataRow hashRow : matching) {
-                    DataRow left = m_probe == m_left ? probeRow : hashRow;
-                    DataRow right = m_probe == m_right ? probeRow : hashRow;
-                    joinContainer.addMatch(left, right);
-                }
-            }
-        }
-
-        public void add(final long rowOffset, final JoinTuple joinAttributes, final DataRow row) {
-
-            m_index.computeIfAbsent(joinAttributes, k -> new LinkedList<DataRow>()).add(row);
-//            m_rowOffsets.add(rowOffset);
-            m_rows.add(row);
-        }
-
-        /**
-         * Only hash buckets can go to disk, probe rows are put into DiskBuckets directly
-         * @param exec
-         * @return
-         */
-        DiskBucket toDisk(final ExecutionContext exec) {
-
-            // release memory
-            m_index = null;
-
-            DiskBucket result = new DiskBucket(m_tableSettings);
-
-            // this should be an IntIterator
-//            Iterator<Long> rowOffsets = m_rowOffsets.iterator();
-
-            for (Iterator<DataRow> rows = m_rows.iterator(); rows.hasNext();) {
-                result.add(-1, rows.next(), exec);
-                // free memory from the in-memory data structure
-                rows.remove();
-//                rowOffsets.remove();
-            }
-
-            return result;
-        }
-
-    }
 
     /**
      * {@inheritDoc}

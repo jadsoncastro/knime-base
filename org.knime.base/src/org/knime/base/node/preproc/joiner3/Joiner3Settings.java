@@ -702,6 +702,22 @@ public class Joiner3Settings {
         return enforceDeterministicOutputOrder.getBooleanValue();
     }
 
+
+    /**
+     * @return
+     */
+    public boolean isRetainLeftUnmatched() {
+        return getJoinMode() == JoinMode.LeftOuterJoin || getJoinMode() == JoinMode.FullOuterJoin;
+    }
+
+
+    /**
+     * @return
+     */
+    public boolean isRetainRightUnmatched() {
+        return getJoinMode() == JoinMode.RightOuterJoin || getJoinMode() == JoinMode.FullOuterJoin;
+    }
+
 //    public SortMode getSortMode() {
 //        return m_sortMode;
 //    }

@@ -49,7 +49,6 @@ package org.knime.base.node.preproc.joiner3.implementation;
 
 import java.util.function.BiFunction;
 
-import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation.JoinTableSettings;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
