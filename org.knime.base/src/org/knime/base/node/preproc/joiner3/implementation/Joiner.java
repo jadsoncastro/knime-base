@@ -255,7 +255,7 @@ public class Joiner {
      * @throws InvalidSettingsException
      * @throws CanceledExecutionException
      */
-    public BufferedDataTable computeJoinTable(final Joiner3Settings settings, final ExecutionContext exec,
+    public JoinContainer computeJoinTable(final Joiner3Settings settings, final ExecutionContext exec,
         final BufferedDataTable... tables) throws CanceledExecutionException, InvalidSettingsException {
 
         // TODO validate settings
@@ -263,7 +263,7 @@ public class Joiner {
         // TODO reuse old data if only minor changes in settings
         m_joinStrategy = settings.getJoinAlgorithm().getFactory().create(settings, tables);
 
-        return m_joinStrategy.twoWayJoin(exec);
+        return m_joinStrategy.join(exec);
     }
 
     /**

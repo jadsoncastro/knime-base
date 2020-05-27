@@ -49,7 +49,6 @@ package org.knime.base.node.preproc.joiner3.implementation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -99,27 +98,8 @@ public abstract class JoinImplementation {
      */
     protected Joiner3Settings m_settings;
 
-    /**
-     * If true, {@link #m_probe} references the outer table and {@link #m_hash} references the inner table. If
-     * false, it's the other way around.
-     */
-    protected final boolean m_outerIsProbe;
+    BufferedDataTable m_left, m_right;
 
-    BufferedDataTable m_outer, m_inner;
-
-    /**
-     * References the table (inner or outer) with fewer rows. This value is empty if tables do not provide row counts to
-     * sort them by size.
-     *  TODO: make this probe input and hash input -- the smaller will usually be the hash input but
-     * in streaming, we're forced to take what the users provides at the non-streaming input
-     */
-    final BufferedDataTable m_hash;
-
-    /**
-     * References the table (either inner table or outer table) with more rows.
-     * This value is empty if tables do not provide row counts to sort them by size.
-     */
-    final BufferedDataTable m_probe;
 
     /** True for Left Outer Join and Full Outer Join. */
     boolean m_retainLeft;
@@ -132,12 +112,6 @@ public abstract class JoinImplementation {
      * joining columns.
      */
     boolean m_matchAny;
-
-    /**
-     * This field is only used when (m_retainLeft && m_matchAny) is true. It holds the row indices of the left table
-     * that did not match to a row of the right table.
-     */
-    Set<Integer> m_globalLeftOuterJoins;
 
     HashMap<RowKey, Set<RowKey>> m_leftRowKeyMap;
 
@@ -152,24 +126,19 @@ public abstract class JoinImplementation {
      * The tables to be joined, in their logical order, e.g,. if the join is Employee ⨝ Department ⨝ City
      * the tables will be stored as Employee, Department, City in this list.
      */
-    protected final List<BufferedDataTable> m_tables;
+//    protected final List<BufferedDataTable> m_tables;
 
 
-    private List<String> m_leftSurvivors;
-    private List<String> m_rightSurvivors;
     /**
      * Contains the column indices that will make it into the output table for a given input table.
      * E.g., Employee = (LastName, DepartmentID, Age) and the output shall contain Age and LastName.
      * Then the result would be int[]{2, 0}
      *
      */
-    protected final Map<BufferedDataTable, int[]> m_projectionColumns = new HashMap<>();
-
-    protected final DataTableSpec m_outputSpec;
 
     protected final Map<BufferedDataTable, JoinTableSettings> m_tableSettings = new HashMap<>();
 
-    final JoinTableSettings outerSettings, innerSettings;
+    final JoinTableSettings leftSettings, rightSettings;
 
     /**
      * @throws InvalidSettingsException
@@ -179,38 +148,20 @@ public abstract class JoinImplementation {
 
         m_settings = settings;
 
-        BufferedDataTable outer = tables[0];
-        m_outer = outer;
+        m_left = tables[0];
+        m_right = tables[1];
 
-        BufferedDataTable inner = tables[1];
-        m_inner = inner;
+        leftSettings = new JoinTableSettings(m_settings, true, m_left);
+        rightSettings = new JoinTableSettings(m_settings, false, m_right);
 
-        // this is write through, sorting the list sorts the array
-        m_tables = Arrays.asList(tables);
+        m_tableSettings.put(m_left, leftSettings);
+        m_tableSettings.put(m_right, rightSettings);
 
-        m_tables.sort(Comparator.comparingLong(BufferedDataTable::size).reversed());
-
-        // TODO this can probably be removed
-        m_probe = m_tables.get(0);
-        m_hash = m_tables.get(1);
-        m_outerIsProbe = m_probe == outer;
-        boolean innerIsProbe = !m_outerIsProbe;
-
-        // first table is the biggest
-
-        // store join columns, include columns, etc. for each table
-        // store row offsets for the probe table
-        m_tableSettings.put(outer, new JoinTableSettings(outer, m_settings.getLeftJoinColumns(), m_settings.getLeftIncludeCols(), m_outerIsProbe));
-        m_tableSettings.put(inner, new JoinTableSettings(inner, m_settings.getRightJoinColumns(), m_settings.getRightIncludeCols(), innerIsProbe));
-        outerSettings = m_tableSettings.get(outer);
-        innerSettings = m_tableSettings.get(inner);
-
+        // TODO remove this?
         m_runtimeWarnings = new ArrayList<String>();
 
-        // FIXME multiple tables
 //        m_outputSpec = createSpec(Arrays.stream(tables).map(BufferedDataTable::getDataTableSpec).toArray(DataTableSpec[]::new));
         // TODO remove try catch fix error structure
-        m_outputSpec = Joiner.createOutputSpec(m_settings, s -> {}, m_outer.getSpec(), m_inner.getSpec());
 
     }
 
@@ -227,9 +178,9 @@ public abstract class JoinImplementation {
      * @author Carl Witt, KNIME AG, Zurich, Switzerland
      *
      */
-    class JoinTableSettings{
+    static class JoinTableSettings{
 
-        final boolean storeRowOffsets;
+        boolean storeRowOffsets = false;
 
         // original table
         // A B C D E F G   column names
@@ -264,6 +215,8 @@ public abstract class JoinImplementation {
 
         /** list of expressions (either a column name or Row Key); not unique */
         final String[] joinClauses;
+        final String[] joinColumnNames;
+
 //        /** column names (including virtual columns like $Row Key$) that are materialized in column group 2; unique */
 //        final String[] joinColumnNames;
         /** where to get the join column values in the source table, might include negative values for $Row Key$; unique */
@@ -300,6 +253,11 @@ public abstract class JoinImplementation {
 
         final int[] includeColumnsWorkingTable;
 
+        final long materializedCells;
+
+        final boolean isLeft;
+
+        final Joiner3Settings m_settings;
 
         /**
          * Drop columns that don't make it into the output early to save heap space and I/O when forced to flush rows to
@@ -308,57 +266,62 @@ public abstract class JoinImplementation {
          * @param forTable refers to the hash input table (or one of multiple hash input tables) or the probe input table
          * @return The spec of the given table filtered to included and join columns.
          */
-        JoinTableSettings(final BufferedDataTable table, final String[] joinClauses, final String[] includeColumnNames, final boolean storeRowOffsets){
+        JoinTableSettings(final Joiner3Settings settings, final boolean isLeft, final BufferedDataTable table){
 
+            m_settings = settings;
+            this.isLeft = isLeft;
             m_forTable = table;
-            this.storeRowOffsets = storeRowOffsets;
+            joinClauses = isLeft ? settings.getLeftJoinColumns() : settings.getRightJoinColumns();
 
-            this.joinClauses = joinClauses;
-            Predicate<String> isJoinColumn = s -> Arrays.asList(joinClauses).contains(s);
-            Predicate<String> isRowKey = m_settings.isRowKeyIndicator();
-            Predicate<String> isRowOffset = s -> ROW_OFFSET_COLUMN_NAME.equals(s);
+            Predicate<String> isRowKey = settings.isRowKeyIndicator();
 
-            String[] joinColumnNames = Arrays.stream(joinClauses)
-                    .distinct()
-                    .toArray(String[]::new);
-            joinColumnsSource = Arrays.stream(joinColumnNames)
-                    .mapToInt(colName -> isRowKey.test(colName) ? ROW_KEY_COLUMN_INDEX_INDICATOR
-                        : table.getDataTableSpec().findColumnIndex(colName))
-                    .toArray();
+            { // join and include columns
 
+                joinColumnNames = Arrays.stream(joinClauses).distinct().toArray(String[]::new);
+                joinColumnsSource =
+                    Arrays
+                        .stream(joinColumnNames).mapToInt(colName -> isRowKey.test(colName)
+                            ? ROW_KEY_COLUMN_INDEX_INDICATOR : table.getDataTableSpec().findColumnIndex(colName))
+                        .toArray();
 
-            this.includeColumnNames = includeColumnNames;
-            Predicate<String> isIncludedColumn = s -> Arrays.asList(includeColumnNames).contains(s);
+                includeColumnNames = isLeft ? settings.getLeftIncludeCols() : settings.getRightIncludeCols();
 
-            DataTableSpec spec = table.getDataTableSpec();
-
-            List<DataColumnSpec> workingTableColumns = spec.stream()
-                .filter(col -> isIncludedColumn.or(isJoinColumn).test(col.getName())).collect(Collectors.toList());
-            if(storeRowOffsets) {
-                // FIXME make sure this name is not taken
-                DataColumnSpec rowOffsetColumn = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
-                workingTableColumns.add(0, rowOffsetColumn);
             }
-            workingTableSpec =
-                new DataTableSpec(workingTableColumns.toArray(new DataColumnSpec[workingTableColumns.size()]));
+            { // working table specification
 
-            workingTableColumnToSource =
-                workingTableSpec.stream()
-                    .map(DataColumnSpec::getName)
-                    .filter(isRowOffset.negate())
-                    .mapToInt(spec::findColumnIndex).toArray();
-            assert Arrays.stream(workingTableColumnToSource).noneMatch(i -> i<0);
+                Predicate<String> isIncludedColumn = s -> Arrays.asList(includeColumnNames).contains(s);
+                Predicate<String> isJoinColumn = s -> Arrays.asList(joinClauses).contains(s);
+                Predicate<String> isRowOffset = s -> ROW_OFFSET_COLUMN_NAME.equals(s);
 
-            joinColumnsWorkingTable = Arrays.stream(joinColumnNames)
-                    .mapToInt(colName -> isRowKey.test(colName) ? ROW_KEY_COLUMN_INDEX_INDICATOR : workingTableSpec.findColumnIndex(colName))
-                    .toArray();
+                DataTableSpec spec = table.getDataTableSpec();
 
-            includeColumnsWorkingTable = workingTableSpec.columnsToIndices(includeColumnNames);
+                List<DataColumnSpec> workingTableColumns = spec.stream()
+                    .filter(col -> isIncludedColumn.or(isJoinColumn).test(col.getName())).collect(Collectors.toList());
+                if (storeRowOffsets) {
+                    // FIXME make sure this name is not taken
+                    DataColumnSpec rowOffsetColumn =
+                        (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
+                    workingTableColumns.add(0, rowOffsetColumn);
+                }
+                workingTableSpec =
+                    new DataTableSpec(workingTableColumns.toArray(new DataColumnSpec[workingTableColumns.size()]));
 
-            includeColumns = spec.columnsToIndices(includeColumnNames);
-            materializeColumnIndices = IntStream
-                .concat(Arrays.stream(joinColumnsSource), Arrays.stream(includeColumns))
-                .distinct().filter(i -> i >= 0).sorted().toArray();
+                workingTableColumnToSource = workingTableSpec.stream().map(DataColumnSpec::getName)
+                    .filter(isRowOffset.negate()).mapToInt(spec::findColumnIndex).toArray();
+                assert Arrays.stream(workingTableColumnToSource).noneMatch(i -> i < 0);
+
+                joinColumnsWorkingTable = Arrays.stream(joinColumnNames).mapToInt(colName -> isRowKey.test(colName)
+                    ? ROW_KEY_COLUMN_INDEX_INDICATOR : workingTableSpec.findColumnIndex(colName)).toArray();
+
+                includeColumnsWorkingTable = workingTableSpec.columnsToIndices(includeColumnNames);
+
+                includeColumns = spec.columnsToIndices(includeColumnNames);
+                materializeColumnIndices =
+                    IntStream.concat(Arrays.stream(joinColumnsSource), Arrays.stream(includeColumns)).distinct()
+                        .filter(i -> i >= 0).sorted().toArray();
+
+                materializedCells = materializeColumnIndices.length * table.size();
+            }
 
         }
 
@@ -441,6 +404,32 @@ public abstract class JoinImplementation {
             return new JoinTuple(cells);
         }
 
+        DataTableSpec outputTableSpecWith(final JoinTableSettings other) {
+            // look up the data column specifications in the left table by their name
+            DataTableSpec leftSpec = this.isLeft ? this.m_forTable.getDataTableSpec() : other.m_forTable.getDataTableSpec();
+            Stream<DataColumnSpec> leftColumnSpecs = Arrays.stream(m_settings.getLeftIncludeCols()).map(name -> leftSpec.getColumnSpec(name));
+
+            // look up the right data column specifications by name, change names if they clash with column name from left table
+            DataTableSpec rightSpec = !this.isLeft ? this.m_forTable.getDataTableSpec() : other.m_forTable.getDataTableSpec();
+            List<DataColumnSpec> rightColSpecs = new ArrayList<>();
+
+            // look up column specs for names and change column names to getRightTargetColumnNames
+            for (int i = 0; i < m_settings.getRightIncludeCols().length; i++) {
+                String name = m_settings.getRightIncludeCols()[i];
+                DataColumnSpecCreator a = new DataColumnSpecCreator(rightSpec.getColumnSpec(name));
+                // make unique against column names that are already taken by the left table
+                if(leftSpec.containsName(name)) {
+                    // change name to disambiguate, e.g., append a suffix
+                    a.setName(m_settings.transformName(rightSpec, name));
+                }
+                a.removeAllHandlers();
+                rightColSpecs.add(a.createSpec());
+            }
+
+            DataTableSpec dataTableSpec = new DataTableSpec(Stream.concat(leftColumnSpecs, rightColSpecs.stream()).toArray(DataColumnSpec[]::new));
+            return dataTableSpec;
+        }
+
         /**
          * @param innerSettings
          * @return
@@ -460,12 +449,20 @@ public abstract class JoinImplementation {
         DataTableSpec sortedChunksTableWith(final JoinTableSettings innerSettings) {
             // TODO factor out
             DataColumnSpec rowOffset = (new DataColumnSpecCreator(ROW_OFFSET_COLUMN_NAME, LongCell.TYPE)).createSpec();
-            return new DataTableSpec(Stream.concat(Stream.of(rowOffset), m_outputSpec.stream()).toArray(DataColumnSpec[]::new));
+            return new DataTableSpec(Stream.concat(Stream.of(rowOffset),outputTableSpecWith(innerSettings).stream()).toArray(DataColumnSpec[]::new));
+        }
+
+        /**
+         * @param bufferedDataTable
+         * @return
+         */
+        public JoinTableSettings workingTableSettings(final BufferedDataTable bufferedDataTable) {
+            return new JoinTableSettings(m_settings, isLeft, bufferedDataTable);
         }
 
     }
 
-    public abstract BufferedDataTable twoWayJoin(final ExecutionContext exec)
+    public abstract JoinContainer join(final ExecutionContext exec)
         throws CanceledExecutionException, InvalidSettingsException;
 
     @Deprecated
@@ -614,36 +611,10 @@ public abstract class JoinImplementation {
     }
 
     /**
-     * @param probeRow a row from the bigger table.
-     * @param hashRow a row from the smaller table.
-     * @return the row that belongs to the outer table.
-     */
-    protected DataRow getLeft(final DataRow probeRow, final DataRow hashRow) {
-        if (m_outerIsProbe) {
-            return probeRow;
-        } else {
-            return hashRow;
-        }
-    }
-
-    /**
-     * @param probeRow a row from the bigger table.
-     * @param hashRow a row from the smaller table.
-     * @return the row that belongs to the inner table.
-     */
-    protected DataRow getRight(final DataRow probeRow, final DataRow hashRow) {
-        if (m_outerIsProbe) {
-            return hashRow;
-        } else {
-            return probeRow;
-        }
-    }
-
-    /**
      * @return new row key consisting of the concatenation of the {@link RowKey} of the row from the outer table and the
      *         {@link RowKey} of the row from the inner table (in that order).
      */
-    protected RowKey concatRowKeys(final DataRow outer, final DataRow inner) {
+    protected static RowKey concatRowKeys(final DataRow outer, final DataRow inner) {
         final StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(outer.getKey().getString());
         stringBuilder.append("_");

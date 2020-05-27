@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -40,30 +41,77 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ------------------------------------------------------------------------
+ * ---------------------------------------------------------------------
  *
  * History
- *   16.12.2009 (Heiko Hofer): created
+ *   May 26, 2020 (carlwitt): created
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
-import org.knime.core.data.RowKey;
+import org.knime.core.data.DataRow;
+import org.knime.core.data.DataTable;
+import org.knime.core.node.BufferedDataTable;
 
 /**
- * This implementation uses one of the given row keys as the joined row key. It
- * uses the one which is not null or the left key if both are not null.
  *
- * @author Heiko Hofer
+ * @author carlwitt
  */
-@Deprecated
-public class UseSingleRowKeyFactory implements JoinedRowKeyFactory {
+public interface IJoinContainer {
 
     /**
-     * {@inheritDoc}
+     * @param left
+     * @param right
      */
-    @Override
-    public RowKey createJoinedKey(final RowKey leftKey, final RowKey rightKey) {
-        return null != leftKey ? leftKey : rightKey;
-    }
+    IJoinContainer addMatch(DataRow left, DataRow right);
+
+    /**
+     * Add an outer match of the right table to this {@link JoinContainer}.
+     * This is a row of the right table appended by missing data cells which
+     * does not match a row of the left table.
+     *
+     * @param row The matching row.
+     * @param m_exec The execution context.
+     */
+    IJoinContainer addRightOuter(DataRow row);
+
+    /**
+     * Add an outer match of the left table to this {@link JoinContainer}.
+     * This is a row of the left table appended by missing data cells which
+     * does not match a row of the right table.
+     *
+     * @param row The matching row.
+     * @param m_exec The execution context.
+     */
+    IJoinContainer addLeftOuter(DataRow row);
+
+    /**
+     * @return The {@link DataTable} which holds the inner joins.
+     */
+    BufferedDataTable getMatches();
+
+    /**
+     * @return The {@link DataTable} which holds the right outer joins.
+     */
+    BufferedDataTable getRightOuter();
+
+    /**
+     * @return The {@link DataTable} which holds the left outer joins.
+     */
+    BufferedDataTable getLeftOuter();
+
+    /**
+     * Close this container.
+     * @return
+     */
+    JoinContainer close();
+
+    /**
+     * @param left
+     * @param right
+     * @param order
+     * @return
+     */
+    IJoinContainer addMatch(DataRow left, DataRow right, long order);
+
 
 }

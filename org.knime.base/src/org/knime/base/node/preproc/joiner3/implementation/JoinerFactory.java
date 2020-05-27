@@ -60,14 +60,13 @@ import org.knime.core.node.BufferedDataTable;
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
  *
  */
+@FunctionalInterface
 public interface JoinerFactory {
 
     public enum JoinAlgorithm {
-        NESTED_LOOP("Nested Loop Join", NestedLoopJoin::new),
-        HASH("In Memory Hash Join", HashJoin::new),
+        HASH("Hash Join", HashJoin::new),
         HYBRID_HASH("Hybrid Hash Join", HybridHashJoin::new),
-//        LEGACY("Hybrid Hash Join (Legacy)", Legacy::new),
-        AUTO("Automatic", CostModelFactory::create);
+        AUTO("Automatic", CostModelFactory.Instance);
 
         private final String m_text;
         private final JoinerFactory m_factory;
@@ -86,9 +85,6 @@ public interface JoinerFactory {
         }
     }
 
-    /**
-     *
-     */
-    public JoinImplementation create(Joiner3Settings settings, BufferedDataTable... tables);
+    public JoinImplementation create(final Joiner3Settings settings, final BufferedDataTable... tables);
 
 }

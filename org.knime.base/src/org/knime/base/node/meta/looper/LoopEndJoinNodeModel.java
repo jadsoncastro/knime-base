@@ -51,8 +51,8 @@ import java.io.File;
 import java.io.IOException;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.ColumnNameDisambiguation;
+import org.knime.base.node.preproc.joiner3.Joiner3Settings.CompositionMode;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
 import org.knime.base.node.preproc.joiner3.implementation.CostModelFactory;
 import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
@@ -158,8 +158,8 @@ final class LoopEndJoinNodeModel extends NodeModel implements LoopEndNode {
             BufferedDataTable left = m_currentAppendTable;
             BufferedDataTable right = copy(inData[0], true,
                     exec.createSubExecutionContext(0.1));
-            JoinImplementation joiner = CostModelFactory.create(settings, left, right);
-            m_currentAppendTable = joiner.twoWayJoin(exec.createSubExecutionContext(0.9));
+            JoinImplementation joiner = CostModelFactory.Instance.create(settings, left, right);
+            m_currentAppendTable = joiner.join(exec.createSubExecutionContext(0.9)).getSingleTable();
         }
         m_iteration += 1;
         if (continueLoop) {

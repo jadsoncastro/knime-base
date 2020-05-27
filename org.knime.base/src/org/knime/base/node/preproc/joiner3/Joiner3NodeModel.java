@@ -52,6 +52,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.knime.base.node.preproc.joiner3.implementation.IJoinContainer;
 import org.knime.base.node.preproc.joiner3.implementation.JoinImplementation;
 import org.knime.base.node.preproc.joiner3.implementation.Joiner;
 import org.knime.core.data.DataTableSpec;
@@ -137,8 +138,7 @@ class Joiner3NodeModel extends NodeModel {
 //        inData[0].getSpec().getColumnSpec(0).getDomain().getValues().size();
 
         // warning and progress messages are directly fed to the execution context
-        BufferedDataTable[] joinedTable = new BufferedDataTable[]{
-            m_joiner.computeJoinTable(m_settings, exec, inData)};
+        IJoinContainer joinedTable = m_joiner.computeJoinTable(m_settings, exec, inData);
 
         // TODO hiliting
         //        m_leftMapper = new DefaultHiLiteMapper(m_leftRowKeyMap);
@@ -148,9 +148,11 @@ class Joiner3NodeModel extends NodeModel {
 
         long after = System.currentTimeMillis();
 
-        LOGGER.info(String.format("%s rows ⨝ %s rows = %s rows (%sms)", inData[0].size(), inData[1].size(), joinedTable[0].size(), after - before));
+        // report
+        LOGGER.info(String.format("%s rows ⨝ %s rows = %s rows (%sms)", inData[0].size(), inData[1].size(), joinedTable.getMatches().size(), after - before));
 
-        return joinedTable;
+        // FIXME route to output ports
+        return new BufferedDataTable[] {joinedTable.getMatches()};
     }
 
     void computeOutputColumnNames() {

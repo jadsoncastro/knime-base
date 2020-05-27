@@ -48,28 +48,20 @@
  */
 package org.knime.base.node.preproc.joiner3.implementation;
 
-import static java.util.Collections.EMPTY_LIST;
-
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.Extractor;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
-import org.knime.core.data.DataCell;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.DataType;
-import org.knime.core.data.RowKey;
 import org.knime.core.data.container.CloseableRowIterator;
-import org.knime.core.data.def.DefaultRow;
-import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -136,7 +128,7 @@ public class HashJoin extends JoinImplementation {
     //    }
 
     @Override
-    public BufferedDataTable twoWayJoin(final ExecutionContext exec) throws CanceledExecutionException, InvalidSettingsException {
+    public JoinContainer join(final ExecutionContext exec) throws CanceledExecutionException, InvalidSettingsException {
 
         RowHandler unmatchedRowHandler =
             m_settings.getJoinMode() == JoinMode.InnerJoin ? IGNORE_ROW : this::handleUnmatched;
@@ -163,157 +155,161 @@ public class HashJoin extends JoinImplementation {
 
     /**
      */
-    private BufferedDataTable _twoWayJoin_(final ExecutionContext exec, final BufferedDataTable leftTable,
-        final BufferedDataTable rightTable, final RowHandler unmatched)
-        throws CanceledExecutionException, InvalidSettingsException {
+//    private BufferedDataTable _twoWayJoin_(final ExecutionContext exec, final BufferedDataTable leftTable,
+//        final BufferedDataTable rightTable, final RowHandler unmatched)
+//        throws CanceledExecutionException, InvalidSettingsException {
+//
+//        // TODO remove timing
+//        long before;
+//        long after;
+//
+//        // This does some input data checking, too
+//        //        DataTableSpec joinedTableSpec = createSpec(new DataTableSpec[] {
+//        //                leftTable.getDataTableSpec(),
+//        //                rightTable.getDataTableSpec()}, m_settings, IGNORE_WARNINGS);
+//
+//        // TODO maybe the join tuple can be stripped and DataCell[] used directly, depends on whether custom comparison logic is needed
+//
+//        // FIXME check sizes here
+//        BufferedDataTable probeInput = leftTable.size() > rightTable.size() ? leftTable : rightTable;
+//        BufferedDataTable hashInput = leftTable.size() > rightTable.size() ? rightTable : leftTable;
+//
+//        //---------------------------------------------
+//        // build index
+//        //---------------------------------------------
+//
+//        exec.setProgress("Building Hash Table");
+//        // FIXME swapping tables
+//        Map<JoinTuple, List<DataRow>> index = StreamSupport.stream(leftTable.spliterator(), false)
+//                .collect(Collectors.groupingBy(m_tableSettings.get(rightTable)::getJoinTupleWorkingRow));
+//
+//
+//        //---------------------------------------------
+//        // build table spec
+//        //---------------------------------------------
+//
+//        m_joinedTableSpec = Joiner.createOutputSpec(m_settings, s -> {},
+//            leftTable.getSpec(), rightTable.getSpec());
+//
+//        BufferedDataContainer result = exec.createDataContainer(m_joinedTableSpec);
+//
+//        //---------------------------------------------
+//        // do join
+//        //---------------------------------------------
+//
+//        exec.setProgress("Joining");
+//
+//        // keep in memory, flush to disk if necessary
+//        // blocks adding more rows if it gets too full
+//
+//        // only get columns that are needed (join attributes and retained
+//        //        bigger.filter(TableFilter.materializeCols(1,2,3));
+//
+//        before = System.currentTimeMillis();
+//
+//        // FIXME
+//        Extractor biggerJoinAttributes = null; //getExtractor(m_bigger);
+//
+//        long rowIndex = 0;
+//
+//        try (CloseableRowIterator bigger = probeInput.iterator()) {
+//            while (bigger.hasNext()) {
+//                DataRow row = bigger.next();
+//
+//                exec.checkCanceled();
+//
+//                JoinTuple query = biggerJoinAttributes.apply(row);
+//
+//                List<DataRow> matches = index.get(query);
+//
+//                if (matches == null) {
+//                    // this row from the bigger table has no matching row in the other table
+//                    // if we're performing an outer join, include the row in the result
+//                    // if we're performing an inner join, ignore the row
+//                    unmatched.accept(m_probe, row);
+//                    continue;
+//                }
+//
+//                updateProgress(exec, m_probe, rowIndex);
+//
+//                for (DataRow match : matches) {
+//                    DataRow outer = getLeft(row, match);
+//                    DataRow inner = getRight(row, match);
+//
+//                    RowKey newRowKey = concatRowKeys(outer, inner);
+//                    result.addRowToTable(new JoinedRow(newRowKey, outer, inner));
+//                }
+//
+//                rowIndex++;
+//            }
+//        }
+//
+//        // does something only for outer joins
+//        addUnmatchedRows(result);
+//
+//        result.close();
+//
+//        after = System.currentTimeMillis();
+//        System.out.println("Joining: " + (after - before));
+//        before = System.currentTimeMillis();
+//
+//        BufferedDataTable bdt = result.getTable();
+//
+//        return bdt;
+//
+//        //---------------------------------------------
+//        // sort
+//        //---------------------------------------------
+//
+//        //        BufferedDataTableSorter bdts = new BufferedDataTableSorter(bdt, Comparator.comparing((final DataRow r) -> r.getKey().getString()));
+//        //
+//        //        exec.setProgress("Sorting");
+//        //        BufferedDataTable sorted = bdts.sort(exec);
+//        //        after = System.currentTimeMillis();
+//        //        System.out.println("Sorting: " + (after-before));
+//        //        return sorted;
+//    }
 
-        // TODO remove timing
-        long before;
-        long after;
 
-        // This does some input data checking, too
-        //        DataTableSpec joinedTableSpec = createSpec(new DataTableSpec[] {
-        //                leftTable.getDataTableSpec(),
-        //                rightTable.getDataTableSpec()}, m_settings, IGNORE_WARNINGS);
-
-        // TODO maybe the join tuple can be stripped and DataCell[] used directly, depends on whether custom comparison logic is needed
-
-        //---------------------------------------------
-        // build index
-        //---------------------------------------------
-
-        exec.setProgress("Building Hash Table");
-        // FIXME swapping tables
-        Map<JoinTuple, List<DataRow>> index = StreamSupport.stream(leftTable.spliterator(), false)
-                .collect(Collectors.groupingBy(m_tableSettings.get(rightTable)::getJoinTupleWorkingRow));
-
-
-        //---------------------------------------------
-        // build table spec
-        //---------------------------------------------
-
-        m_joinedTableSpec = Joiner.createOutputSpec(m_settings, s -> {},
-            leftTable.getSpec(), rightTable.getSpec());
-
-        BufferedDataContainer result = exec.createDataContainer(m_joinedTableSpec);
-
-        //---------------------------------------------
-        // do join
-        //---------------------------------------------
-
-        exec.setProgress("Joining");
-
-        // keep in memory, flush to disk if necessary
-        // blocks adding more rows if it gets too full
-
-        // only get columns that are needed (join attributes and retained
-        //        bigger.filter(TableFilter.materializeCols(1,2,3));
-
-        before = System.currentTimeMillis();
-
-        // FIXME
-        Extractor biggerJoinAttributes = null; //getExtractor(m_bigger);
-
-        long rowIndex = 0;
-
-        try (CloseableRowIterator bigger = m_probe.iterator()) {
-            while (bigger.hasNext()) {
-                DataRow row = bigger.next();
-
-                exec.checkCanceled();
-
-                JoinTuple query = biggerJoinAttributes.apply(row);
-
-                List<DataRow> matches = index.get(query);
-
-                if (matches == null) {
-                    // this row from the bigger table has no matching row in the other table
-                    // if we're performing an outer join, include the row in the result
-                    // if we're performing an inner join, ignore the row
-                    unmatched.accept(m_probe, row);
-                    continue;
-                }
-
-                updateProgress(exec, m_probe, rowIndex);
-
-                for (DataRow match : matches) {
-                    DataRow outer = getLeft(row, match);
-                    DataRow inner = getRight(row, match);
-
-                    RowKey newRowKey = concatRowKeys(outer, inner);
-                    result.addRowToTable(new JoinedRow(newRowKey, outer, inner));
-                }
-
-                rowIndex++;
-            }
-        }
-
-        // does something only for outer joins
-        addUnmatchedRows(result);
-
-        result.close();
-
-        after = System.currentTimeMillis();
-        System.out.println("Joining: " + (after - before));
-        before = System.currentTimeMillis();
-
-        BufferedDataTable bdt = result.getTable();
-
-        return bdt;
-
-        //---------------------------------------------
-        // sort
-        //---------------------------------------------
-
-        //        BufferedDataTableSorter bdts = new BufferedDataTableSorter(bdt, Comparator.comparing((final DataRow r) -> r.getKey().getString()));
-        //
-        //        exec.setProgress("Sorting");
-        //        BufferedDataTable sorted = bdts.sort(exec);
-        //        after = System.currentTimeMillis();
-        //        System.out.println("Sorting: " + (after-before));
-        //        return sorted;
-    }
-
-
-    private void addUnmatchedRows(final BufferedDataContainer result) {
-
-        long rowId = result.size();
-
-        // for each table, output the unmatched rows
-        // output unmatched rows for outer table first, then unmatched rows for inner table(s)
-        for(BufferedDataTable table : m_tables) {
-
-            int[] indices = m_projectionColumns.get(table);
-
-            // the offset of the first column to fill with cells from `table`
-            // equals the number of columns in tables before this table
-            int fillBegin = m_tables.stream().limit(m_tables.indexOf(table))
-                .mapToInt(tableBefore -> tableBefore.getDataTableSpec().getNumColumns()).sum();
-
-            List<DataRow> unmatchedRows = m_unmatched.getOrDefault(table, EMPTY_LIST);
-
-            for(DataRow row : unmatchedRows) {
-
-                // key is just a running number
-                RowKey key = new RowKey(Long.toString(rowId));
-
-                // cell data is copied from the source row and padded with missing values
-                DataCell[] cells = new DataCell[m_joinedTableSpec.getNumColumns()];
-                Arrays.fill(cells, DataType.getMissingCell());
-
-                for (int i = 0; i < indices.length; i++) {
-                    cells[i + fillBegin] = row.getCell(indices[i]);
-                }
-
-                // compose and add output row
-                DataRow padded = new DefaultRow(key, cells);
-                result.addRowToTable(padded);
-
-                rowId++;
-            }
-        }
-
-    }
+//    private void addUnmatchedRows(final BufferedDataContainer result) {
+//
+//        long rowId = result.size();
+//
+//        // for each table, output the unmatched rows
+//        // output unmatched rows for outer table first, then unmatched rows for inner table(s)
+//        for(BufferedDataTable table : m_tables) {
+//
+//            int[] indices = m_projectionColumns.get(table);
+//
+//            // the offset of the first column to fill with cells from `table`
+//            // equals the number of columns in tables before this table
+//            int fillBegin = m_tables.stream().limit(m_tables.indexOf(table))
+//                .mapToInt(tableBefore -> tableBefore.getDataTableSpec().getNumColumns()).sum();
+//
+//            List<DataRow> unmatchedRows = m_unmatched.getOrDefault(table, EMPTY_LIST);
+//
+//            for(DataRow row : unmatchedRows) {
+//
+//                // key is just a running number
+//                RowKey key = new RowKey(Long.toString(rowId));
+//
+//                // cell data is copied from the source row and padded with missing values
+//                DataCell[] cells = new DataCell[m_joinedTableSpec.getNumColumns()];
+//                Arrays.fill(cells, DataType.getMissingCell());
+//
+//                for (int i = 0; i < indices.length; i++) {
+//                    cells[i + fillBegin] = row.getCell(indices[i]);
+//                }
+//
+//                // compose and add output row
+//                DataRow padded = new DefaultRow(key, cells);
+//                result.addRowToTable(padded);
+//
+//                rowId++;
+//            }
+//        }
+//
+//    }
 
     private void updateProgress(final ExecutionContext exec, final BufferedDataTable m_bigger, final long rowIndex) {
         exec.setProgress(1. * rowIndex / m_bigger.getRowCount());
@@ -333,6 +329,58 @@ public class HashJoin extends JoinImplementation {
             }
 
         };
+    }
+
+    static void withFallback(final JoinTableSettings table1, final JoinTableSettings table2,
+        final JoinContainer container, final ExecutionContext exec) throws CanceledExecutionException {
+
+        boolean table1IsBigger = table1.materializedCells > table2.materializedCells;
+        JoinTableSettings probeInput = table1IsBigger ? table1 : table2;
+        JoinTableSettings hashInput = table1IsBigger ? table2 : table1;
+
+        // TODO nested loop fallback
+        // TODO
+        Map<JoinTuple, List<DataRow>> index = StreamSupport.stream(hashInput.m_forTable.spliterator(), false)
+            .collect(Collectors.groupingBy(hashInput::getJoinTuple));
+
+        // factor out to drop-in replace with something that scales to long
+////        BitSet matchedHashRows = new BitSet(hashBucket.getRowCount());
+//
+//        DataTableSpec joinedBucketsSpec = outerSettings.sortedChunksTableWith(innerSettings);
+//
+//        BufferedDataContainer result = exec.createDataContainer(joinedBucketsSpec);
+//
+        Consumer<DataRow> unmatchedProbeRows = probeInput.isLeft ? container::addLeftOuter : container::addRightOuter;
+
+        try (CloseableRowIterator probeRows = probeInput.m_forTable.iterator()) {
+
+            while (probeRows.hasNext()) {
+
+                exec.checkCanceled();
+
+                DataRow probeRow = probeRows.next();
+                JoinTuple probeTuple = probeInput.getJoinTupleWorkingRow(probeRow);
+
+                List<DataRow> matching = index.get(probeTuple);
+
+                if (matching == null) {
+                    // this row from the bigger table has no matching row in the other table
+                    // if we're performing an outer join, include the row in the result
+                    // if we're performing an inner join, ignore the row
+                    //                unmatched.accept(m_bigger, row);
+                    unmatchedProbeRows.accept(probeRow);
+                } else {
+                    for (DataRow hashRow : matching) {
+//
+//                        DataRow left = table1.isOuter ?
+                        // FIXME!! outer / inner -> left / right
+                        container.addMatch(probeRow, hashRow);
+                    }
+                }
+
+        }
+
+    }
     }
 
 }

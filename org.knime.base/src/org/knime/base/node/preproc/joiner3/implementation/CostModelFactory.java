@@ -60,9 +60,15 @@ import org.knime.core.node.BufferedDataTable;
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
  *
  */
-public class CostModelFactory {
+public class CostModelFactory implements JoinerFactory {
 
-    public static JoinImplementation create(final Joiner3Settings settings, final BufferedDataTable... tables) {
-        return new HashJoin(settings, tables);
+    private CostModelFactory() {
+
+    }
+    public static CostModelFactory Instance = new CostModelFactory();
+
+    @Override
+    public JoinImplementation create(final Joiner3Settings settings, final BufferedDataTable... tables) {
+        return new HybridHashJoin(settings, tables);
     }
 }

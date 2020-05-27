@@ -73,7 +73,6 @@ import javax.swing.event.ChangeListener;
 
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.ColumnNameDisambiguation;
 import org.knime.base.node.preproc.joiner3.Joiner3Settings.JoinMode;
-import org.knime.base.node.preproc.joiner3.Joiner3Settings.SortMode;
 import org.knime.base.node.preproc.joiner3.implementation.JoinerFactory.JoinAlgorithm;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataTableSpec;
@@ -145,9 +144,9 @@ class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog
     private DialogComponentBoolean m_unmatchedRowsToSeparateOutputPort = new DialogComponentBoolean(m_settings.m_unmatchedRowsToSeparateOutputPort, "Separate Output Ports for Unmatched Rows");
 
     private DialogComponentNumber memoryLimitPercent = new DialogComponentNumber(m_settings.m_memoryLimitPercentSettingsModel, "Maximum Heap Memory Usage %", 1);
-//    private DialogComponentBoolean deterministicOutputOrder = new DialogComponentBoolean(m_settings.m_deterministicOutputOrder, "Sort output rows");
-    private final JComboBox<SortMode> m_sortMode =
-            new JComboBox<>(new SortMode[]{SortMode.Natural, SortMode.None});
+    private DialogComponentBoolean deterministicOutputOrder = new DialogComponentBoolean(m_settings.enforceDeterministicOutputOrder, "Sort output rows");
+//    private final JComboBox<SortMode> m_sortMode =
+//            new JComboBox<>(new SortMode[]{SortMode.Natural, SortMode.None});
 
     private final JTextField m_maxOpenFiles = new JTextField();
     private final JTextField m_rowKeySeparator = new JTextField();
@@ -340,7 +339,7 @@ class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog
         c.gridy++;
         p.add(m_joinMode,c);
         c.gridy++;
-        p.add(m_sortMode, c);
+        p.add(deterministicOutputOrder.getComponentPanel(), c);
 
         c.gridy++;
         p.add(new JLabel("Join algorithm ", SwingConstants.RIGHT), c);
@@ -502,7 +501,9 @@ class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog
         m_settings.loadSettingsForDialog(settings);
 
         m_joinMode.setSelectedItem(m_settings.getJoinMode());
-        m_sortMode.setSelectedItem(m_settings.getSortMode());
+        deterministicOutputOrder.loadSettingsFrom(settings, specs);
+
+//        m_sortMode.setSelectedItem(m_settings.getSortMode());
         m_joinAlgorithm.setSelectedItem(m_settings.getJoinAlgorithm());
 
         m_matchAllButton.setSelected(m_settings.getCompositionMode().equals(
@@ -551,7 +552,9 @@ class Joiner3NodeDialog extends NodeDialogPane implements ConfigurableNodeDialog
     protected void saveSettingsTo(final NodeSettingsWO settings)
             throws InvalidSettingsException {
         m_settings.setJoinMode((JoinMode)m_joinMode.getSelectedItem());
-        m_settings.setSortMode((SortMode)m_sortMode.getSelectedItem());
+        deterministicOutputOrder.saveSettingsTo(settings);
+
+//        m_settings.setSortMode((SortMode)m_sortMode.getSelectedItem());
         m_settings.setJoinAlgorithm((JoinAlgorithm) m_joinAlgorithm.getSelectedItem());
 
         if (m_matchAllButton.isSelected()) {
