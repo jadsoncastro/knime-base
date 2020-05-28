@@ -57,6 +57,7 @@ import org.knime.core.node.context.NodeCreationConfiguration;
  *
  * @author Carl Witt, KNIME AG, Zurich, Switzerland
  * @author Thorsten Meinl, University of Konstanz
+ * @since 4.2
  *
  */
 public class Joiner3NodeFactory extends ConfigurableNodeFactory<Joiner3NodeModel> {
