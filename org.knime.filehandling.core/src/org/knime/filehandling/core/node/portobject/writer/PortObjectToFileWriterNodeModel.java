@@ -84,6 +84,7 @@ public abstract class PortObjectToFileWriterNodeModel<C extends PortObjectWriter
     @Override
     protected final void writeToPath(final PortObject object, final Path outputPath, final ExecutionContext exec)
         throws Exception {
+        // TODO: fixme
         try (final OutputStream outputStream = Files.newOutputStream(outputPath,
             getConfig().getOverwriteModel().getBooleanValue() ? OVERWRITE_OPTIONS : NO_OVERWRITE_OPTIONS)) {
             write(object, outputStream, exec);

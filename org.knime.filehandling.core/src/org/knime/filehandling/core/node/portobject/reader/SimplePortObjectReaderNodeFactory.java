@@ -92,7 +92,6 @@ public abstract class SimplePortObjectReaderNodeFactory extends
      * Returns the port object reader node configuration.
      *
      * @param creationConfig the {@link NodeCreationConfiguration}
-     *
      * @return the reader configuration
      */
     private PortObjectReaderNodeConfig getConfig(final NodeCreationConfiguration creationConfig) {

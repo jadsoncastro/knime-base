@@ -1,5 +1,6 @@
 /*
  * ------------------------------------------------------------------------
+ *
  *  Copyright by KNIME AG, Zurich, Switzerland
  *  Website: http://www.knime.com; Email: contact@knime.com
  *
@@ -40,40 +41,44 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * -------------------------------------------------------------------
+ * ---------------------------------------------------------------------
+ *
+ * History
+ *   Jun 3, 2020 (Mark Ortmann, KNIME GmbH, Berlin, Germany): created
  */
-package org.knime.base.node.io.filehandling.pmml.writer;
+package org.knime.filehandling.core.node.portobject;
 
-import org.knime.core.node.context.NodeCreationConfiguration;
-import org.knime.core.node.port.PortType;
-import org.knime.core.node.port.pmml.PMMLPortObject;
-import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeFactory;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentFileChooser3;
+import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 
 /**
- * Node factory of the PMML writer node.
+ * The allowed selection for the {@link DialogComponentFileChooser3} in the context of PortObject reader and writers.
  *
- * @author Simon Schmid, KNIME GmbH, Konstanz, Germany
- * @since 4.2
+ * @author Mark Ortmann, KNIME GmbH, Berlin, Germany
  */
-public final class PMMLWriterNodeFactory2
-    extends PortObjectWriterNodeFactory<PMMLWriterNodeModel2, PMMLWriterNodeDialog2> {
+public enum SelectionMode {
 
-    /** File chooser history Id. */
-    private static final String HISTORY_ID = "pmml_model_reader_writer";
+        /** Corresponds to {@link FilterMode#FILE}. */
+        FILE(FilterMode.FILE),
 
-    @Override
-    protected PortType getInputPortType() {
-        return PMMLPortObject.TYPE;
+        /** Corresponds to {@link FilterMode#FOLDER}. */
+        FOLDER(FilterMode.FOLDER),
+
+        /** Corresponds to {@link FilterMode#FILE} and {@link FilterMode#FOLDER}. */
+        FILE_AND_FOLDER(FilterMode.FILE, FilterMode.FOLDER);
+
+    private final FilterMode[] m_filters;
+
+    private SelectionMode(final FilterMode... filters) {
+        m_filters = filters;
     }
 
-    @Override
-    protected PMMLWriterNodeDialog2 createDialog(final NodeCreationConfiguration creationConfig) {
-        return new PMMLWriterNodeDialog2(creationConfig, HISTORY_ID);
+    /**
+     * Returns the associated {@link FilterMode}s.
+     *
+     * @return the associated {@link FilterMode}s
+     */
+    public FilterMode[] getFilters() {
+        return m_filters;
     }
-
-    @Override
-    protected PMMLWriterNodeModel2 createNodeModel(final NodeCreationConfiguration creationConfig) {
-        return new PMMLWriterNodeModel2(creationConfig);
-    }
-
 }

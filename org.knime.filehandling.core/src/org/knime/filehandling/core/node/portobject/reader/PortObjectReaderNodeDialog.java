@@ -46,10 +46,10 @@
 package org.knime.filehandling.core.node.portobject.reader;
 
 import org.knime.core.node.util.FileSystemBrowser;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentFileChooser3;
 import org.knime.filehandling.core.defaultnodesettings.fileselection.FileSelectionDialog;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeDialog;
+import org.knime.filehandling.core.node.portobject.SelectionMode;
 
 /**
  * Node dialog for port object reader nodes that can be extended with additional settings components.
@@ -58,33 +58,6 @@ import org.knime.filehandling.core.node.portobject.PortObjectIONodeDialog;
  * @param <C> the config of the node
  */
 public class PortObjectReaderNodeDialog<C extends PortObjectReaderNodeConfig> extends PortObjectIONodeDialog<C> {
-
-    /**
-     * The allowed selection for the {@link DialogComponentFileChooser3}.
-     *
-     * @author Mark Ortmann, KNIME GmbH, Berlin, Germany
-     */
-    protected enum SelectionMode {
-
-            /** Corresponds to {@link FilterMode#FILE}. */
-            FILE(FilterMode.FILE),
-
-            /** Corresponds to {@link FilterMode#FOLDER}. */
-            FOLDER(FilterMode.FOLDER),
-
-            /** Corresponds to {@link FilterMode#FILE} and {@link FilterMode#FOLDER}. */
-            FILE_AND_FOLDER(FilterMode.FILE, FilterMode.FOLDER);
-
-        private final FilterMode[] m_filters;
-
-        private SelectionMode(final FilterMode... filters) {
-            m_filters = filters;
-        }
-
-        FilterMode[] getFilters() {
-            return m_filters;
-        }
-    }
 
     /**
      * Constructor.
@@ -117,7 +90,6 @@ public class PortObjectReaderNodeDialog<C extends PortObjectReaderNodeConfig> ex
      */
     public PortObjectReaderNodeDialog(final C config, final String historyID) {
         this(config, historyID, new FilterMode[0]);
-
     }
 
 }

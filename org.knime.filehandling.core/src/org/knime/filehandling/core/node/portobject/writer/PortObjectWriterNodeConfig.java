@@ -46,9 +46,7 @@
  */
 package org.knime.filehandling.core.node.portobject.writer;
 
-import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeSettingsRO;
-import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.context.NodeCreationConfiguration;
 import org.knime.core.node.defaultnodesettings.SettingsModelBoolean;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
 
@@ -71,52 +69,21 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig {
 
     /**
      * Constructor for configs in which the file chooser doesn't filter on file suffixes.
+     *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      */
-    public PortObjectWriterNodeConfig() {
-        super(null, null, null);
+    public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig) {
+        this(creationConfig, new String[0]);
     }
 
     /**
      * Constructor for configs in which the file chooser filters on a set of file suffixes.
      *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      * @param fileSuffixes the suffixes to filter on
      */
-    public PortObjectWriterNodeConfig(final String[] fileSuffixes) {
-        super(null, null, null, fileSuffixes);
+    public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes) {
+        super(creationConfig, PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME, fileSuffixes);
     }
 
-    /**
-     * @return the overwriteModel
-     */
-    public SettingsModelBoolean getOverwriteModel() {
-        return m_overwriteModel;
-    }
-
-    /**
-     * @return the createDirectoryModel
-     */
-    public SettingsModelBoolean getCreateDirectoryModel() {
-        return m_createDirectoryModel;
-    }
-
-    @Override
-    protected void validateConfigurationForModel(final NodeSettingsRO settings) throws InvalidSettingsException {
-        super.validateConfigurationForModel(settings);
-        m_overwriteModel.validateSettings(settings);
-        m_createDirectoryModel.validateSettings(settings);
-    }
-
-    @Override
-    protected void saveConfigurationForModel(final NodeSettingsWO settings) {
-        super.saveConfigurationForModel(settings);
-        m_overwriteModel.saveSettingsTo(settings);
-        m_createDirectoryModel.saveSettingsTo(settings);
-    }
-
-    @Override
-    protected void loadConfigurationForModel(final NodeSettingsRO settings) throws InvalidSettingsException {
-        super.loadConfigurationForModel(settings);
-        m_overwriteModel.loadSettingsFrom(settings);
-        m_createDirectoryModel.loadSettingsFrom(settings);
-    }
 }
