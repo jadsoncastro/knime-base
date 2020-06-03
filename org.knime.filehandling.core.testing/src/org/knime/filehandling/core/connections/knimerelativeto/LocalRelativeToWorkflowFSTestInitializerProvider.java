@@ -60,7 +60,7 @@ import org.knime.filehandling.core.testing.FSTestInitializerProvider;
  */
 public class LocalRelativeToWorkflowFSTestInitializerProvider implements FSTestInitializerProvider {
 
-    private static final String FS_NAME = "relativeToWorkflow";
+    private static final String FS_NAME = "knime-relative-workflow";
 
     private static final String KNIME_FS_HOST = "knime.workflow";
 
