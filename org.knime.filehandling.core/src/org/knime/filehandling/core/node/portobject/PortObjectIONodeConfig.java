@@ -50,11 +50,13 @@ import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
+import org.knime.core.node.context.NodeCreationConfiguration;
 import org.knime.core.node.defaultnodesettings.SettingsModelIntegerBounded;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.util.FileUtil;
-import org.knime.filehandling.core.defaultnodesettings.SettingsModelFileChooser2;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.SettingsModelFileChooser3;
+import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeConfig;
 
 /**
@@ -72,7 +74,7 @@ public abstract class PortObjectIONodeConfig {
     private static final String CFG_CONNECTION_TIMEOUT = "timeout";
 
     /** The file chooser model. */
-    private final SettingsModelFileChooser2 m_fileChooserModel;
+    private final SettingsModelFileChooser3 m_fileChooserModel;
 
     /** The timeout settings model. */
     private final SettingsModelIntegerBounded m_timeoutModel = new SettingsModelIntegerBounded(CFG_CONNECTION_TIMEOUT,
@@ -80,18 +82,27 @@ public abstract class PortObjectIONodeConfig {
 
     /**
      * Constructor for configs in which the file chooser doesn't filter on file suffixes.
+     *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
+     * @param fileSystemPortIdentifier identifier of the file system port group in <b>portsConfig</b>
      */
-    protected PortObjectIONodeConfig() {
-        m_fileChooserModel = new SettingsModelFileChooser2(CFG_FILE_CHOOSER);
+    protected PortObjectIONodeConfig(final NodeCreationConfiguration creationConfig,
+        final String fileSystemPortIdentifier) {
+        this(creationConfig, fileSystemPortIdentifier, new String[0]);
     }
 
     /**
      * Constructor for configs in which the file chooser filters on a set of file suffixes.
      *
-     * @param fileSuffixes the suffixes to filter on
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
+     * @param fileSystemPortIdentifier identifier of the file system port group in <b>portsConfig</b>
+     * @param fileSuffixes the supported file extensions
      */
-    protected PortObjectIONodeConfig(final String[] fileSuffixes) {
-        m_fileChooserModel = new SettingsModelFileChooser2(CFG_FILE_CHOOSER, fileSuffixes);
+    protected PortObjectIONodeConfig(final NodeCreationConfiguration creationConfig,
+        final String fileSystemPortIdentifier, final String[] fileSuffixes) {
+        m_fileChooserModel = new SettingsModelFileChooser3(CFG_FILE_CHOOSER,
+            creationConfig.getPortConfig().orElseThrow(IllegalStateException::new), fileSystemPortIdentifier,
+            FilterMode.FILE, fileSuffixes);
     }
 
     /**
@@ -99,7 +110,7 @@ public abstract class PortObjectIONodeConfig {
      *
      * @return the file chooser model
      */
-    public final SettingsModelFileChooser2 getFileChooserModel() {
+    public final SettingsModelFileChooser3 getFileChooserModel() {
         return m_fileChooserModel;
     }
 

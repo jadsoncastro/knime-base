@@ -46,6 +46,7 @@
  */
 package org.knime.filehandling.core.node.portobject.reader;
 
+import org.knime.core.node.context.NodeCreationConfiguration;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
 
 /**
@@ -57,18 +58,21 @@ public class PortObjectReaderNodeConfig extends PortObjectIONodeConfig {
 
     /**
      * Constructor for configs in which the file chooser doesn't filter on file suffixes.
+     *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      */
-    public PortObjectReaderNodeConfig() {
-        super();
+    public PortObjectReaderNodeConfig(final NodeCreationConfiguration creationConfig) {
+        this(creationConfig, new String[0]);
     }
 
     /**
      * Constructor for configs in which the file chooser filters on a set of file suffixes.
      *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      * @param fileSuffixes the file suffixes to filter on
      */
-    public PortObjectReaderNodeConfig(final String[] fileSuffixes) {
-        super(fileSuffixes);
+    public PortObjectReaderNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes) {
+        super(creationConfig, PortObjectFromPathReaderNodeModel.PORT_OBJECT_OUTPUT_GRP_NAME, fileSuffixes);
     }
 
 }

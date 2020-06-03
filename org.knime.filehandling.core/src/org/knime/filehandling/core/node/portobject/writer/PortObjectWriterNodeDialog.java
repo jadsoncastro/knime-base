@@ -90,7 +90,7 @@ public class PortObjectWriterNodeDialog<C extends PortObjectWriterNodeConfig> ex
      */
     public PortObjectWriterNodeDialog(final PortsConfiguration portsConfig, final C config,
         final String fileChooserHistoryId, final int fileChooserSelectionMode) {
-        super(portsConfig, config, fileChooserHistoryId, JFileChooser.SAVE_DIALOG, fileChooserSelectionMode);
+        super(config, fileChooserHistoryId, JFileChooser.SAVE_DIALOG, null);
         m_overwriteCheckbox =
             new DialogComponentBoolean(getConfig().getOverwriteModel(), getOverwriteLabel(fileChooserSelectionMode));
         m_createDirectoriesCheckbox =
