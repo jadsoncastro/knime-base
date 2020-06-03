@@ -93,15 +93,23 @@ public abstract class FSFileSystem<T extends FSPath> extends FileSystem {
      */
     private final Set<Closeable> m_closeables = new HashSet<>();
 
+    /**
+     * The type of this file system, such as "local", or "amazon-s3".
+     * @see FSType
+     */
+    private final FSType m_fsType;
+
     private boolean m_isOpen = true;
 
     /**
      * Creates a new instance.
      *
+     * @param fsType The type of this file system, such as "local", or "amazon-s3".
      * @param fsLocationSpec An {@link FSLocationSpec} that characterizes this file system.
      * @param workingDir The working directory to use (see {@link #getWorkingDirectory()}).
      */
-    public FSFileSystem(final FSLocationSpec fsLocationSpec, final String workingDir) {
+    public FSFileSystem(final FSType fsType, final FSLocationSpec fsLocationSpec, final String workingDir) {
+        m_fsType = fsType;
         m_fsLocationSpec = fsLocationSpec;
         m_workingDirectory = workingDir;
     }
@@ -111,8 +119,17 @@ public abstract class FSFileSystem<T extends FSPath> extends FileSystem {
      *
      * @return the {@link FSLocationSpec} for this file system instance.
      */
-    public FSLocationSpec getFSLocationSpec() {
+    public final FSLocationSpec getFSLocationSpec() {
         return m_fsLocationSpec;
+    }
+
+    /**
+     * Returns the type of this file system, such as "local", or "amazon-s3".
+     *
+     * @return the type of this file system as an {@link FSType} instance.
+     */
+    public final FSType getFSType() {
+        return m_fsType;
     }
 
     /**

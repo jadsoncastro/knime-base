@@ -66,6 +66,7 @@ import org.knime.filehandling.core.connections.FSFileSystem;
 import org.knime.filehandling.core.connections.FSFileSystemProvider;
 import org.knime.filehandling.core.connections.FSLocationSpec;
 import org.knime.filehandling.core.connections.FSPath;
+import org.knime.filehandling.core.connections.FSType;
 import org.knime.filehandling.core.connections.base.attributes.AttributesCache;
 import org.knime.filehandling.core.connections.base.attributes.BaseAttributesCache;
 import org.knime.filehandling.core.connections.base.attributes.BaseFileAttributes;
@@ -93,14 +94,18 @@ public abstract class BaseFileSystem<T extends FSPath> extends FSFileSystem<T> {
      * @param uri the uri identifying the file system
      * @param cacheTTL the time to live for cached elements in milliseconds. A value of 0 or smaller indicates no
      *            caching.
+     * @param workingDirectory The working directory of this file system instance.
+     * @param fsType The type of this file system, such as "local", or "amazon-s3".
+     * @param fsLocationSpec
      */
     public BaseFileSystem(final  BaseFileSystemProvider<T, ?> fileSystemProvider,
         final URI uri,
         final long cacheTTL,
         final String workingDirectory,
+        final FSType fsType,
         final FSLocationSpec fsLocationSpec) {
 
-        super(fsLocationSpec, workingDirectory);
+        super(fsType, fsLocationSpec, workingDirectory);
 
         Validate.notNull(fileSystemProvider, "File system provider must not be null.");
         Validate.notNull(uri, "URI must not be null.");
