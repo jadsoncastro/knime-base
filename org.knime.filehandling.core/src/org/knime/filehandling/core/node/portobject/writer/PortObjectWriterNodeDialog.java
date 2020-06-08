@@ -99,7 +99,7 @@ public class PortObjectWriterNodeDialog<C extends PortObjectWriterNodeConfig> ex
      * @return the name of the fixed port object input port group
      */
     protected String getPortObjectInputGrpName() {
-        return PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME;
+        return PortObjectWriterNodeFactory.PORT_OBJECT_INPUT_GRP_NAME;
     }
 
 }

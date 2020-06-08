@@ -68,9 +68,6 @@ import org.knime.filehandling.core.node.portobject.PortObjectIONodeModel;
 public abstract class PortObjectToPathWriterNodeModel<C extends PortObjectWriterNodeConfig>
     extends PortObjectIONodeModel<C> {
 
-    /** The name of the fixed port object input port group. */
-    static final String PORT_OBJECT_INPUT_GRP_NAME = "Port Object";
-
     /**
      * Constructor.
      *
@@ -78,7 +75,7 @@ public abstract class PortObjectToPathWriterNodeModel<C extends PortObjectWriter
      * @param config the config
      */
     protected PortObjectToPathWriterNodeModel(final NodeCreationConfiguration creationConfig, final C config) {
-        super(creationConfig.getPortConfig().get(), config);
+        super(creationConfig.getPortConfig().orElseThrow(IllegalStateException::new), config);
     }
 
     @Override
@@ -103,8 +100,8 @@ public abstract class PortObjectToPathWriterNodeModel<C extends PortObjectWriter
             }
             // write path
             try {
-                writeToPath(data[getPortsConfig().getInputPortLocation().get(PORT_OBJECT_INPUT_GRP_NAME)[0]], path,
-                    exec);
+                writeToPath(data[getPortsConfig().getInputPortLocation()
+                    .get(PortObjectWriterNodeFactory.PORT_OBJECT_INPUT_GRP_NAME)[0]], path, exec);
             } catch (FileAlreadyExistsException e) {
                 throw new IOException(
                     "Output file '" + e.getFile() + "' exists and must not be overwritten due to user settings.", e);

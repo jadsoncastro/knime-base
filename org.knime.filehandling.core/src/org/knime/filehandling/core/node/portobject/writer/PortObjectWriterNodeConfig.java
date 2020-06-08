@@ -94,8 +94,8 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsM
         final FilterMode defaultFilterMode) {
         super(creationConfig,
             new SettingsModelWriterFileChooser(CFG_FILE_CHOOSER,
-                creationConfig.getPortConfig().orElseThrow(IllegalStateException::new),
-                PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME, defaultFilterMode, FileOverwritePolicy.FAIL,
+                creationConfig.getPortConfig().orElseThrow(IllegalStateException::new), CONNECTION_INPUT_PORT_GRP_NAME,
+                defaultFilterMode, FileOverwritePolicy.FAIL,
                 EnumSet.of(FileOverwritePolicy.OVERWRITE, FileOverwritePolicy.FAIL), fileSuffixes));
     }
 

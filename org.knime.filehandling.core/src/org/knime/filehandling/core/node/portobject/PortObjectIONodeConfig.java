@@ -65,6 +65,9 @@ import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeCo
  */
 public abstract class PortObjectIONodeConfig<S extends SettingsModelFileChooser3> {
 
+    /** The name of the optional connection input port group. */
+    protected static final String CONNECTION_INPUT_PORT_GRP_NAME = "File System Connection";
+
     /** Config key for file chooser. */
     protected static final String CFG_FILE_CHOOSER = "filechooser";
 

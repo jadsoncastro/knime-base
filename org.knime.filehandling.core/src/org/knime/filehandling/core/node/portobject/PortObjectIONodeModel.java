@@ -71,9 +71,6 @@ import org.knime.filehandling.core.node.portobject.writer.PortObjectToPathWriter
 public abstract class PortObjectIONodeModel<C extends PortObjectIONodeConfig<?>>
     extends NodeModel {
 
-    /** The name of the optional connection input port group. */
-    static final String CONNECTION_INPUT_PORT_GRP_NAME = "File System Connection";
-
     /** The ports configuration. */
     private final PortsConfiguration m_portsConfig;
 

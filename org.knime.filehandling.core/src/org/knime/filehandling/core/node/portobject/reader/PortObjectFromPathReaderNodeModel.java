@@ -72,9 +72,6 @@ import org.knime.filehandling.core.node.portobject.PortObjectIONodeModel;
 public abstract class PortObjectFromPathReaderNodeModel<C extends PortObjectReaderNodeConfig>
     extends PortObjectIONodeModel<C> {
 
-    /** The name of the fixed port object output port group. */
-    static final String PORT_OBJECT_OUTPUT_GRP_NAME = "Port Object";
-
     /**
      * Constructor.
      *

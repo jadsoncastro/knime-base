@@ -76,8 +76,8 @@ public class PortObjectReaderNodeConfig extends PortObjectIONodeConfig<SettingsM
     public PortObjectReaderNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes) {
         super(creationConfig,
             new SettingsModelFileChooser3(CFG_FILE_CHOOSER,
-                creationConfig.getPortConfig().orElseThrow(IllegalStateException::new),
-                PortObjectFromPathReaderNodeModel.PORT_OBJECT_OUTPUT_GRP_NAME, FilterMode.FILE, fileSuffixes));
+                creationConfig.getPortConfig().orElseThrow(IllegalStateException::new), CONNECTION_INPUT_PORT_GRP_NAME,
+                FilterMode.FILE, fileSuffixes));
     }
 
 }
