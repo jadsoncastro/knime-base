@@ -45,7 +45,7 @@
  */
 package org.knime.filehandling.core.node.portobject.writer;
 
-import org.knime.core.node.util.FileSystemBrowser;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.writer.DialogComponentWriterFileChooser;
 import org.knime.filehandling.core.defaultnodesettings.fileselection.FileSelectionDialog;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeDialog;
@@ -68,7 +68,8 @@ public class PortObjectWriterNodeDialog<C extends PortObjectWriterNodeConfig> ex
      *            from <b>model</b> is used)
      */
     private PortObjectWriterNodeDialog(final C config, final String historyID, final FilterMode[] filterModes) {
-        super(config, historyID, FileSystemBrowser.DialogType.SAVE_DIALOG, filterModes);
+        super(config,
+            fvm -> new DialogComponentWriterFileChooser(config.getFileChooserModel(), historyID, fvm, filterModes));
     }
 
     /**

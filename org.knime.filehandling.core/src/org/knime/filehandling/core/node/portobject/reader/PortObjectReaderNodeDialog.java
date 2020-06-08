@@ -45,7 +45,8 @@
  */
 package org.knime.filehandling.core.node.portobject.reader;
 
-import org.knime.core.node.util.FileSystemBrowser;
+import org.knime.core.node.util.FileSystemBrowser.DialogType;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentFileChooser3;
 import org.knime.filehandling.core.defaultnodesettings.fileselection.FileSelectionDialog;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeDialog;
@@ -68,7 +69,8 @@ public class PortObjectReaderNodeDialog<C extends PortObjectReaderNodeConfig> ex
      *            from <b>model</b> is used)
      */
     private PortObjectReaderNodeDialog(final C config, final String historyID, final FilterMode[] filterModes) {
-        super(config, historyID, FileSystemBrowser.DialogType.OPEN_DIALOG, filterModes);
+        super(config, fvm -> new DialogComponentFileChooser3(config.getFileChooserModel(), historyID,
+            DialogType.OPEN_DIALOG, fvm, filterModes));
     }
 
     /**

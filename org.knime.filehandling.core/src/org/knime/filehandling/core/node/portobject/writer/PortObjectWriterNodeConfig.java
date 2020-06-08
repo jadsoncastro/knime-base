@@ -46,8 +46,12 @@
  */
 package org.knime.filehandling.core.node.portobject.writer;
 
+import java.util.EnumSet;
+
 import org.knime.core.node.context.NodeCreationConfiguration;
-import org.knime.core.node.defaultnodesettings.SettingsModelBoolean;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.writer.FileOverwritePolicy;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.writer.SettingsModelWriterFileChooser;
+import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
 
 /**
@@ -55,17 +59,7 @@ import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
  *
  * @author Simon Schmid, KNIME GmbH, Konstanz, Germany
  */
-public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig {
-
-    /** Config key for overwrite checkbox. */
-    private static final String CFG_OVERWRITE = "overwrite";
-
-    /** Config key for create directory checkbox. */
-    private static final String CFG_CREATE_DIRECTORY = "create_directory";
-
-    private final SettingsModelBoolean m_overwriteModel = new SettingsModelBoolean(CFG_OVERWRITE, false);
-
-    private final SettingsModelBoolean m_createDirectoryModel = new SettingsModelBoolean(CFG_CREATE_DIRECTORY, false);
+public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsModelWriterFileChooser> {
 
     /**
      * Constructor for configs in which the file chooser doesn't filter on file suffixes.
@@ -83,7 +77,11 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig {
      * @param fileSuffixes the suffixes to filter on
      */
     public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes) {
-        super(creationConfig, PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME, fileSuffixes);
+        super(creationConfig,
+            new SettingsModelWriterFileChooser(CFG_FILE_CHOOSER,
+                creationConfig.getPortConfig().orElseThrow(IllegalStateException::new),
+                PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME, FilterMode.FILE, FileOverwritePolicy.FAIL,
+                EnumSet.of(FileOverwritePolicy.OVERWRITE, FileOverwritePolicy.FAIL), fileSuffixes));
     }
 
 }

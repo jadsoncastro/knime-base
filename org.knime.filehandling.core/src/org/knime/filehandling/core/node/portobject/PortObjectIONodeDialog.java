@@ -50,6 +50,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
@@ -64,9 +65,6 @@ import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.util.FileSystemBrowser;
 import org.knime.filehandling.core.data.location.variable.FSLocationVariableType;
 import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentFileChooser3;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.SettingsModelFileChooser3;
-import org.knime.filehandling.core.defaultnodesettings.fileselection.FileSelectionDialog;
-import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.reader.PortObjectReaderNodeDialog;
 import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeDialog;
 
@@ -77,33 +75,29 @@ import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeDi
  * @param <C> the node config of the node
  * @noextend extend either {@link PortObjectReaderNodeDialog} or {@link PortObjectWriterNodeDialog}
  */
-public abstract class PortObjectIONodeDialog<C extends PortObjectIONodeConfig> extends NodeDialogPane {
+public abstract class PortObjectIONodeDialog<C extends PortObjectIONodeConfig<?>> extends NodeDialogPane {
 
     /** The config. */
     private final C m_config;
 
     private final List<JPanel> m_additionalPanels = new ArrayList<>();
 
-    private final DialogComponentFileChooser3 m_filePanel;
+    private DialogComponentFileChooser3 m_filePanel;
 
     /**
      * Constructor.
      *
      * @param config the config
-     * @param historyID id used to store file history used by {@link FileSelectionDialog}
-     * @param dialogType the type of dialog i.e. open or save
-     * @param filterModes the available {@link FilterMode FilterModes} (if a none are provided, the default filter mode
-     *            from <b>model</b> is used)
+     * @param createPanel {@link Function} to create an instance of {@link DialogComponentFileChooser3}
      */
-    protected PortObjectIONodeDialog(final C config, final String historyID,
-        final FileSystemBrowser.DialogType dialogType, final FilterMode... filterModes) {
+    protected PortObjectIONodeDialog(final C config,
+        final Function<FlowVariableModel, ? extends DialogComponentFileChooser3> createPanel) {
         m_config = config;
-        final SettingsModelFileChooser3 fileChooserModel = m_config.getFileChooserModel();
-        final FlowVariableModel readFvm =
-            createFlowVariableModel(fileChooserModel.getKeysForFSLocation(), FSLocationVariableType.INSTANCE);
-        m_filePanel = new DialogComponentFileChooser3(fileChooserModel, historyID, dialogType, readFvm, filterModes);
-        m_additionalPanels.add(createInputLocationPanel(
-            dialogType == FileSystemBrowser.DialogType.OPEN_DIALOG ? "Input location" : "Output location"));
+        m_filePanel = createPanel.apply(createFlowVariableModel(config.getFileChooserModel().getKeysForFSLocation(),
+            FSLocationVariableType.INSTANCE));
+        m_additionalPanels
+            .add(createInputLocationPanel(m_filePanel.getDialogType() == FileSystemBrowser.DialogType.OPEN_DIALOG
+                ? "Input location" : "Output location"));
     }
 
     /**

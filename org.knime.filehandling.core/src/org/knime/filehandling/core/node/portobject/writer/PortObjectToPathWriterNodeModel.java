@@ -53,11 +53,10 @@ import java.util.Optional;
 
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.context.NodeCreationConfiguration;
-import org.knime.core.node.defaultnodesettings.SettingsModelBoolean;
 import org.knime.core.node.port.PortObject;
 import org.knime.filehandling.core.defaultnodesettings.filechooser.WritePathAccessor;
-import org.knime.filehandling.core.defaultnodesettings.filesystemchooser.status.PriorityStatusConsumer;
-import org.knime.filehandling.core.defaultnodesettings.filesystemchooser.status.StatusMessage;
+import org.knime.filehandling.core.defaultnodesettings.status.PriorityStatusConsumer;
+import org.knime.filehandling.core.defaultnodesettings.status.StatusMessage;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeModel;
 
 /**
@@ -93,10 +92,9 @@ public abstract class PortObjectToPathWriterNodeModel<C extends PortObjectWriter
             }
             // create parent directories
             final Path parentPath = path.getParent();
-            // TODO: fix this
-            final SettingsModelBoolean createDirectoryModel = getConfig().getCreateDirectoryModel();
+            final boolean createParentDir = getConfig().getFileChooserModel().isCreateParentDirectories();
             if (parentPath != null && !Files.exists(parentPath)) {
-                if (createDirectoryModel.isEnabled() && createDirectoryModel.getBooleanValue()) {
+                if (createParentDir) {
                     Files.createDirectories(parentPath);
                 } else {
                     throw new IOException(String.format(

@@ -51,58 +51,34 @@ import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.context.NodeCreationConfiguration;
-import org.knime.core.node.defaultnodesettings.SettingsModelIntegerBounded;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
-import org.knime.core.util.FileUtil;
 import org.knime.filehandling.core.defaultnodesettings.filechooser.SettingsModelFileChooser3;
-import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeConfig;
 
 /**
  * Configuration class for port object reader and writer nodes that can be extended with additional configurations.
  *
  * @author Simon Schmid, KNIME GmbH, Konstanz, Germany
+ * @param <S> any class inheriting from {@link SettingsModelFileChooser3}
  * @noextend extend either {@link PortObject} or {@link PortObjectWriterNodeConfig}
  */
-public abstract class PortObjectIONodeConfig {
+public abstract class PortObjectIONodeConfig<S extends SettingsModelFileChooser3> {
 
     /** Config key for file chooser. */
-    private static final String CFG_FILE_CHOOSER = "filechooser";
-
-    /** Config key for connection timeout. */
-    private static final String CFG_CONNECTION_TIMEOUT = "timeout";
+    protected static final String CFG_FILE_CHOOSER = "filechooser";
 
     /** The file chooser model. */
-    private final SettingsModelFileChooser3 m_fileChooserModel;
-
-    /** The timeout settings model. */
-    private final SettingsModelIntegerBounded m_timeoutModel = new SettingsModelIntegerBounded(CFG_CONNECTION_TIMEOUT,
-        FileUtil.getDefaultURLTimeoutMillis(), 0, Integer.MAX_VALUE);
-
-    /**
-     * Constructor for configs in which the file chooser doesn't filter on file suffixes.
-     *
-     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
-     * @param fileSystemPortIdentifier identifier of the file system port group in <b>portsConfig</b>
-     */
-    protected PortObjectIONodeConfig(final NodeCreationConfiguration creationConfig,
-        final String fileSystemPortIdentifier) {
-        this(creationConfig, fileSystemPortIdentifier, new String[0]);
-    }
+    private final S m_fileChooserModel;
 
     /**
      * Constructor for configs in which the file chooser filters on a set of file suffixes.
      *
      * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
-     * @param fileSystemPortIdentifier identifier of the file system port group in <b>portsConfig</b>
-     * @param fileSuffixes the supported file extensions
+     * @param fileChooserModel the file chooser model
      */
-    protected PortObjectIONodeConfig(final NodeCreationConfiguration creationConfig,
-        final String fileSystemPortIdentifier, final String[] fileSuffixes) {
-        m_fileChooserModel = new SettingsModelFileChooser3(CFG_FILE_CHOOSER,
-            creationConfig.getPortConfig().orElseThrow(IllegalStateException::new), fileSystemPortIdentifier,
-            FilterMode.FILE, fileSuffixes);
+    protected PortObjectIONodeConfig(final NodeCreationConfiguration creationConfig, final S fileChooserModel) {
+        m_fileChooserModel = fileChooserModel;
     }
 
     /**
@@ -110,17 +86,8 @@ public abstract class PortObjectIONodeConfig {
      *
      * @return the file chooser model
      */
-    public final SettingsModelFileChooser3 getFileChooserModel() {
+    public final S getFileChooserModel() {
         return m_fileChooserModel;
-    }
-
-    /**
-     * Returns the timeout model.
-     *
-     * @return the timeout model
-     */
-    public final SettingsModelIntegerBounded getTimeoutModel() {
-        return m_timeoutModel;
     }
 
     /**
@@ -131,7 +98,6 @@ public abstract class PortObjectIONodeConfig {
      */
     protected void validateConfigurationForModel(final NodeSettingsRO settings) throws InvalidSettingsException {
         m_fileChooserModel.validateSettings(settings);
-        m_timeoutModel.validateSettings(settings);
     }
 
     /**
@@ -141,7 +107,6 @@ public abstract class PortObjectIONodeConfig {
      */
     protected void saveConfigurationForModel(final NodeSettingsWO settings) {
         m_fileChooserModel.saveSettingsTo(settings);
-        m_timeoutModel.saveSettingsTo(settings);
     }
 
     /**
@@ -152,7 +117,6 @@ public abstract class PortObjectIONodeConfig {
      */
     protected void loadConfigurationForModel(final NodeSettingsRO settings) throws InvalidSettingsException {
         m_fileChooserModel.loadSettingsFrom(settings);
-        m_timeoutModel.loadSettingsFrom(settings);
     }
 
     /**
