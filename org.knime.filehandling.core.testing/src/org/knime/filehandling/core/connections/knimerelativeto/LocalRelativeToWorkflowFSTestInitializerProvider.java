@@ -45,6 +45,7 @@
  */
 package org.knime.filehandling.core.connections.knimerelativeto;
 
+import java.io.IOException;
 import java.util.Map;
 
 import org.knime.filehandling.core.connections.DefaultFSLocationSpec;
@@ -67,8 +68,8 @@ public class LocalRelativeToWorkflowFSTestInitializerProvider implements FSTestI
     private static final FSLocationSpec FS_LOCATION_SPEC = new DefaultFSLocationSpec(Choice.KNIME_FS, KNIME_FS_HOST);
 
     @Override
-    public FSTestInitializer setup(final Map<String, String> configuration) {
-        return new LocalRelativeToFSTestInitializer(configuration.get("root"), KNIME_FS_HOST);
+    public FSTestInitializer setup(final Map<String, String> configuration) throws IOException {
+        return new LocalRelativeToFSTestInitializer(KNIME_FS_HOST);
     }
 
     @Override

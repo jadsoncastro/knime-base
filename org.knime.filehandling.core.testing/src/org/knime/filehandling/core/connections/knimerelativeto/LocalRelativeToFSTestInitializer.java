@@ -76,6 +76,7 @@ import org.osgi.framework.FrameworkUtil;
  * @author Sascha Wolke, KNIME GmbH
  */
 public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer {
+
     private static final String DUMMY_WORKFLOW = "resources/dummy-workflow";
 
     private final URI m_fileSystemUri;
@@ -87,12 +88,11 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
     /**
      * Default constructor.
      *
-     * @param rootDirectory  temporary directory to use as mountpoint root
      * @param fileSystemHost hostname of knime FS (knime.mountpoint or knime.workflow)
      * @throws IOException
      */
-    public LocalRelativeToFSTestInitializer(final String rootDirectory, final String fileSystemHost) {
-        super(rootDirectory);
+    public LocalRelativeToFSTestInitializer(final String fileSystemHost) throws IOException {
+        super();
         m_fileSystemUri = URI.create("knime://" + fileSystemHost);
     }
 
@@ -102,7 +102,7 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
     }
 
     @Override
-    public FSPath getRoot() {
+    public FSPath getScratchDir() {
         return (FSPath)m_fileSystem.getRootDirectories().iterator().next();
     }
 
@@ -151,8 +151,8 @@ public class LocalRelativeToFSTestInitializer extends BasicLocalTestInitializer 
     public void beforeTestCase() throws IOException {
         super.beforeTestCase();
 
-        final Path currentWorkflow = createWorkflowDir(getTempFolder(), "current-workflow");
-        m_workflowManager = getWorkflowManager(getTempFolder().toFile(), currentWorkflow, false);
+        final Path currentWorkflow = createWorkflowDir(getRealScratchDir(), "current-workflow");
+        m_workflowManager = getWorkflowManager(getRealScratchDir().toFile(), currentWorkflow, false);
         NodeContext.pushContext(m_workflowManager);
         m_fileSystem = LocalRelativeToFileSystemProvider.getOrCreateFileSystem(m_fileSystemUri);
     }

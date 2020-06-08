@@ -44,74 +44,61 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Dec 17, 2019 (Tobias Urhaug, KNIME GmbH, Berlin, Germany): created
+ *   Jun 5, 2020 (bjoern): created
  */
-package org.knime.filehandling.core.testing.local;
+package org.knime.filehandling.core.testing;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import org.knime.filehandling.core.connections.FSConnection;
 import org.knime.filehandling.core.connections.FSFileSystem;
-import org.knime.filehandling.core.connections.FSFiles;
 import org.knime.filehandling.core.connections.FSPath;
-import org.knime.filehandling.core.testing.DefaultFSTestInitializer;
 
 /**
- * Implementation of a test initializer using the local file system.
  *
- * @author Tobias Urhaug, KNIME GmbH, Berlin, Germany
+ * @author bjoern
  */
-public abstract class BasicLocalTestInitializer<P extends FSPath, F extends FSFileSystem<P>>
-    extends DefaultFSTestInitializer<P, F> {
+public abstract class DefaultFSTestInitializer<P extends FSPath, F extends FSFileSystem<P>>
+    implements FSTestInitializer<P, F> {
 
-    private final Path m_localWorkingDir;
+    private final FSConnection m_fsConnection;
 
-    /**
-     * @throws IOException when something went wrong while creating the temporary test root folder.
-     */
-    public BasicLocalTestInitializer(final FSConnection fsConnection, final Path localWorkingDir) throws IOException {
-        super(fsConnection);
-        m_localWorkingDir = localWorkingDir;
+    private final F m_fileSystem;
+
+    private int testCaseCounter = 0;
+
+    @SuppressWarnings("unchecked")
+    protected DefaultFSTestInitializer(final FSConnection fsConnection) {
+        m_fsConnection = fsConnection;
+        m_fileSystem = (F) m_fsConnection.getFileSystem();
     }
 
     @Override
-    public void afterTestCase() throws IOException {
-        FSFiles.deleteRecursively(getLocalTestCaseScratchDir());
+    public FSConnection getFSConnection() {
+        return m_fsConnection;
+    }
+
+    @Override
+    public final P getTestCaseScratchDir() {
+        return (P)getFileSystem().getWorkingDirectory().resolve(Integer.toString(testCaseCounter));
+    }
+
+    @Override
+    public F getFileSystem() {
+        return m_fileSystem;
+    }
+
+    @Override
+    public final void beforeTestCase() throws IOException {
+        testCaseCounter++;
+        beforeTestCaseInternal();
     }
 
     /**
-     * @return the testcase scratch dir as a path from the platform default provider.
+     * Internal file-system-specific method to prepare the test case. The typical thing to implement here is to create
+     * the test-case specific scratch directory returned by {@link #getTestCaseScratchDir()}.
+     *
+     * @throws IOException
      */
-    protected Path getLocalTestCaseScratchDir() {
-        final String testCaseSuffix = getTestCaseScratchDir().getFileName().toString();
-        return m_localWorkingDir.resolve(testCaseSuffix);
-    }
-
-    protected Path createLocalFileWithContent(final String content, final String... pathComponents) {
-        if (pathComponents == null || pathComponents.length == 0) {
-            throw new IllegalArgumentException("path components can not be empty or null");
-        }
-
-        Path directories = getLocalTestCaseScratchDir();
-        for (int i = 0; i < pathComponents.length - 1; i++) {
-            directories = directories.resolve(pathComponents[i]);
-        }
-
-        final Path file = directories.resolve(pathComponents[pathComponents.length - 1]);
-        try {
-            Files.createDirectories(directories);
-            final Path createdPath = Files.createFile(file);
-            try (BufferedWriter writer = Files.newBufferedWriter(createdPath)) {
-                writer.write(content);
-            }
-
-            return createdPath;
-        } catch (final IOException e) {
-            throw new UncheckedIOException("Exception while creating a file at ." + file.toString(), e);
-        }
-    }
+    protected abstract void beforeTestCaseInternal() throws IOException;
 }

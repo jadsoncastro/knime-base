@@ -48,31 +48,41 @@
  */
 package org.knime.filehandling.core.testing.local;
 
+import java.io.IOException;
+
 import org.knime.filehandling.core.connections.FSConnection;
 import org.knime.filehandling.core.connections.FSPath;
 import org.knime.filehandling.core.connections.local.LocalFSConnection;
+import org.knime.filehandling.core.connections.local.LocalFileSystem;
 
 /**
  * Implementation of a local file system test initializer.
  *
  * @author Tobias Urhaug, KNIME GmbH, Berlin, Germany
  */
-public class LocalFSTestInitializer extends BasicLocalTestInitializer {
+public class LocalFSTestInitializer extends BasicLocalTestInitializer<LocalPath, LocalFileSystem> {
 
     private final FSConnection m_connection;
 
+    private final FSPath m_scratchDir;
+
     /**
      * Creates a new instance with a test root folder in the systems temporary directory.
+     *
+     * @throws IOException
      */
-    public LocalFSTestInitializer(final String root) {
-        super(root);
-        m_connection = new LocalFSConnection(root);
+    @SuppressWarnings("resource")
+    public LocalFSTestInitializer(final LocalFSConnection fsConnection, final String workingDirPrefix) throws IOException {
+        super();
+        // for LocalFS we are using the "real" scratch dir as the working directory
+        m_connection = new LocalFSConnection(getRealScratchDir().toString());
+
+        m_scratchDir = m_connection.getFileSystem().getPath(getRealScratchDir().toString());
     }
 
-    @SuppressWarnings("resource")
     @Override
-    public FSPath getRoot() {
-        return m_connection.getFileSystem().getPath(getTempFolder().toString());
+    public FSPath getScratchDir() {
+        return m_scratchDir;
     }
 
     @Override

@@ -42,57 +42,34 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
+ *
+ * History
+ *   Jun 5, 2020 (bjoern): created
  */
-package org.knime.filehandling.core.testing.integrationtests.filesystemprovider;
+package org.knime.filehandling.core.testing;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-
-import org.junit.Test;
-import org.knime.filehandling.core.testing.FSTestInitializer;
-import org.knime.filehandling.core.testing.integrationtests.AbstractParameterizedFSTest;
-import org.knime.filehandling.core.util.IOESupplier;
+import java.util.UUID;
 
 /**
  *
- * @author Tobias Urhaug, KNIME GmbH, Berlin, Germany
+ * @author bjoern
  */
-public class CheckAccessTest extends AbstractParameterizedFSTest {
+public abstract class DefaultFSTestInitializerProvider implements FSTestInitializerProvider {
 
-    public CheckAccessTest(final String fsType, final IOESupplier<FSTestInitializer> testInitializer)
-        throws IOException {
-        super(fsType, testInitializer);
-    }
-
-    @Test
-    public void test_file_exists() throws IOException {
-        Path pathToFile = m_testInitializer.createFile("dir", "file.txt");
-        pathToFile.getFileSystem().provider().checkAccess(pathToFile);
-        assertTrue(Files.exists(pathToFile));
-    }
-
-    @Test
-    public void test_file_does_not_exist() throws IOException {
-        FileSystem fileSystem = m_connection.getFileSystem();
-        String rootFolder = m_testInitializer.getTestCaseScratchDir().toString();
-        Path pathToNonExistingFile = fileSystem.getPath(rootFolder, "non-existing-file");
-
-        try {
-            pathToNonExistingFile.getFileSystem().provider().checkAccess(pathToNonExistingFile);
-            fail("checkAccess() did not throw a NoSuchFileException");
-        } catch (NoSuchFileException e) {
-        } catch (Exception e) {
-            fail("Unexpected exception thrown by checkAccess(): " + e.getClass().getName());
-        }
-
-        assertFalse(Files.exists(pathToNonExistingFile));
+    /**
+     * Generates a randomized path with the given prefix. Implementations should call this method to randomize
+     * the working directory path of the file system (prior to its instantiation).
+     *
+     * @param workingDirPrefix The prefix of the working directory, which should be an absolute path.
+     * @param sep The path separator used by the concrete file system.
+     * @return a randomized path with the given prefix
+     */
+    protected static String generateRandomizedWorkingDir(final String workingDirPrefix, final String sep) {
+        return String.format("%s%s%s%s", //
+            workingDirPrefix, //
+            sep, //
+            UUID.randomUUID().toString(), //
+            sep);
     }
 
 }
