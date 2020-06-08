@@ -69,8 +69,11 @@ public enum SelectionMode {
 
     private final FilterMode[] m_filters;
 
+    private final FilterMode m_defaultFilter;
+
     private SelectionMode(final FilterMode... filters) {
         m_filters = filters;
+        m_defaultFilter = filters[0];
     }
 
     /**
@@ -80,5 +83,14 @@ public enum SelectionMode {
      */
     public FilterMode[] getFilters() {
         return m_filters;
+    }
+
+    /**
+     * Returns the associated default {@link FilterMode}.
+     *
+     * @return the associated default {@link FilterMode}
+     */
+    public FilterMode getDefaultFilter() {
+        return m_defaultFilter;
     }
 }

@@ -64,7 +64,7 @@ public class PortObjectWriterNodeDialog<C extends PortObjectWriterNodeConfig> ex
      *
      * @param config the config
      * @param historyID id used to store file history used by {@link FileSelectionDialog}
-     * @param filterModes the available {@link FilterMode FilterModes} (if a none are provided, the default filter mode
+     * @param filterModes the available {@link FilterMode FilterModes} (if none are provided, the default filter mode
      *            from <b>model</b> is used)
      */
     private PortObjectWriterNodeDialog(final C config, final String historyID, final FilterMode[] filterModes) {
@@ -91,6 +91,15 @@ public class PortObjectWriterNodeDialog<C extends PortObjectWriterNodeConfig> ex
      */
     public PortObjectWriterNodeDialog(final C config, final String historyID) {
         this(config, historyID, new FilterMode[0]);
+    }
+
+    /**
+     * Returns the name of the fixed port object input port group.
+     *
+     * @return the name of the fixed port object input port group
+     */
+    protected String getPortObjectInputGrpName() {
+        return PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME;
     }
 
 }

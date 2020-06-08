@@ -53,6 +53,7 @@ import org.knime.filehandling.core.defaultnodesettings.filechooser.writer.FileOv
 import org.knime.filehandling.core.defaultnodesettings.filechooser.writer.SettingsModelWriterFileChooser;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
+import org.knime.filehandling.core.node.portobject.SelectionMode;
 
 /**
  * Configuration class for port object writer nodes that can be extended with additional configurations.
@@ -65,9 +66,11 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsM
      * Constructor for configs in which the file chooser doesn't filter on file suffixes.
      *
      * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
+     * @param defaultSelectionMode the default {@link SelectionMode}
      */
-    public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig) {
-        this(creationConfig, new String[0]);
+    public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig,
+        final SelectionMode defaultSelectionMode) {
+        this(creationConfig, new String[0], defaultSelectionMode.getDefaultFilter());
     }
 
     /**
@@ -77,10 +80,22 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsM
      * @param fileSuffixes the suffixes to filter on
      */
     public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes) {
+        this(creationConfig, fileSuffixes, FilterMode.FILE);
+    }
+
+    /**
+     * Constructor for configs in which the file chooser filters on a set of file suffixes.
+     *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
+     * @param fileSuffixes the suffixes to filter on
+     * @param defaultFilterMode the default {@link FilterMode}
+     */
+    private PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes,
+        final FilterMode defaultFilterMode) {
         super(creationConfig,
             new SettingsModelWriterFileChooser(CFG_FILE_CHOOSER,
                 creationConfig.getPortConfig().orElseThrow(IllegalStateException::new),
-                PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME, FilterMode.FILE, FileOverwritePolicy.FAIL,
+                PortObjectToPathWriterNodeModel.PORT_OBJECT_INPUT_GRP_NAME, defaultFilterMode, FileOverwritePolicy.FAIL,
                 EnumSet.of(FileOverwritePolicy.OVERWRITE, FileOverwritePolicy.FAIL), fileSuffixes));
     }
 
