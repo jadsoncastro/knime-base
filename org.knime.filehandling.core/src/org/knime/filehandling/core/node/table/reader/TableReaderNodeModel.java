@@ -99,11 +99,6 @@ final class TableReaderNodeModel<C extends ReaderSpecificConfig<C>> extends Node
     private final MultiTableReader<C, ?, ?> m_tableReader;
 
     /**
-     * The {@link ProducerRegistry} required to load {@link #m_config}.
-     */
-    private final ProducerRegistry<?, ?> m_registry;
-
-    /**
      * Constructs a node model with no inputs and one output.
      *
      * @param config storing the user settings
@@ -117,7 +112,6 @@ final class TableReaderNodeModel<C extends ReaderSpecificConfig<C>> extends Node
         m_config = config;
         m_pathSettings = pathSettingsModel;
         m_tableReader = tableReader;
-        m_registry = registry;
     }
 
     /**
@@ -136,7 +130,6 @@ final class TableReaderNodeModel<C extends ReaderSpecificConfig<C>> extends Node
         m_config = config;
         m_pathSettings = pathSettingsModel;
         m_tableReader = tableReader;
-        m_registry = registry;
     }
 
     @Override
@@ -228,13 +221,13 @@ final class TableReaderNodeModel<C extends ReaderSpecificConfig<C>> extends Node
 
     @Override
     protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-        m_config.validate(settings, m_registry);
+        m_config.validate(settings);
         m_pathSettings.validateSettings(settings);
     }
 
     @Override
     protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
-        m_config.loadInModel(settings, m_registry);
+        m_config.loadInModel(settings);
         m_pathSettings.loadSettingsFrom(settings);
     }
 

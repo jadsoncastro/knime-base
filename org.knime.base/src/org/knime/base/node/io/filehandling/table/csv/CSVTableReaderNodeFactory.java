@@ -68,7 +68,7 @@ public final class CSVTableReaderNodeFactory extends AbstractCSVTableReaderNodeF
     @Override
     protected NodeDialogPane createNodeDialogPane(final NodeCreationConfiguration creationConfig) {
         return new CSVTableReaderNodeDialog2(createPathSettings(creationConfig.getURLConfig()), createConfig(),
-            createMultiTableReader(), getProducerRegistry());
+            createMultiTableReader());
     }
 
     @Override

@@ -65,7 +65,6 @@ import javax.swing.JRadioButton;
 import javax.swing.event.ChangeListener;
 
 import org.knime.base.node.io.filehandling.table.csv.reader.CSVTableReaderConfig;
-import org.knime.core.data.convert.map.ProducerRegistry;
 import org.knime.core.node.FlowVariableModel;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
@@ -101,9 +100,8 @@ final class CSVTableReaderNodeDialog2 extends CSVTableReaderNodeDialog {
 
     CSVTableReaderNodeDialog2(final SettingsModelFileChooser2 fileChooserModel,
         final MultiTableReadConfig<CSVTableReaderConfig> config,
-        final MultiTableReader<CSVTableReaderConfig, Class<?>, String> multiReader,
-        final ProducerRegistry<?, ?> producerRegistry) {
-        super(fileChooserModel, config, multiReader, producerRegistry);
+        final MultiTableReader<CSVTableReaderConfig, Class<?>, String> multiReader) {
+        super(fileChooserModel, config, multiReader);
     }
 
     private JPanel createFilePanel() {

@@ -58,7 +58,6 @@ import javax.swing.JPanel;
 
 import org.knime.base.node.io.filehandling.table.csv.CSVTableReaderNodeDialog;
 import org.knime.base.node.io.filehandling.table.csv.reader.CSVTableReaderConfig;
-import org.knime.core.data.convert.map.ProducerRegistry;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
@@ -84,9 +83,8 @@ final class SimpleFileReaderNodeDialog extends CSVTableReaderNodeDialog {
 
     SimpleFileReaderNodeDialog(final PathAwareFileHistoryPanel pathSettings,
         final MultiTableReadConfig<CSVTableReaderConfig> config,
-        final MultiTableReader<CSVTableReaderConfig, Class<?>, String> multiReader,
-        final ProducerRegistry<?, ?> producerRegistry) {
-        super(pathSettings, config, multiReader, producerRegistry);
+        final MultiTableReader<CSVTableReaderConfig, Class<?>, String> multiReader) {
+        super(pathSettings, config, multiReader);
         m_disableComponentsRemoteContext = false;
     }
 

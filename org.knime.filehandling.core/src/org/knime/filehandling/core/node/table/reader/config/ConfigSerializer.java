@@ -44,42 +44,71 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Feb 3, 2020 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
+ *   Jun 8, 2020 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
 package org.knime.filehandling.core.node.table.reader.config;
 
-import java.util.OptionalInt;
-import java.util.OptionalLong;
-
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeSettings;
 import org.knime.core.node.NodeSettingsRO;
+import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.node.NotConfigurableException;
+import org.knime.core.node.port.PortObjectSpec;
 
 /**
- * Contains utility methods for configuration classes.
+ * Performs saving and loading of {@link MultiTableReadConfig} objects to and from {@link NodeSettingsWO} and
+ * {@link NodeSettingsRO}, respectively. This allows to store the same class of {@link MultiTableReadConfig} in
+ * different ways depending on the node it is used for.
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+ * @param <C> the type of config this serializer operates on
  */
-final class ReaderConfigUtils {
+public interface ConfigSerializer<C> {
 
-    private ReaderConfigUtils() {
-        // utility class
-    }
+    /**
+     * Method for loading the config in the node dialog.
+     *
+     * @param config to load the settings into
+     * @param settings the {@link NodeSettingsRO} to load from
+     * @param specs the {@link PortObjectSpec PortObjectSpecs} of the node
+     * @throws NotConfigurableException if the node is currently not configurable
+     */
+    void loadInDialog(final C config, final NodeSettingsRO settings, final PortObjectSpec[] specs)
+        throws NotConfigurableException;
 
-    static OptionalLong emptyIfNegative(final long value) {
-        return value < 0 ? OptionalLong.empty() : OptionalLong.of(value);
-    }
+    /**
+     * Method for saving the config in the node dialog.
+     *
+     * @param config to save
+     * @param settings {@link NodeSettingsWO} to save to
+     * @throws InvalidSettingsException if the current config is invalid
+     */
+    void saveInDialog(final C config, final NodeSettingsWO settings) throws InvalidSettingsException;
 
-    static OptionalInt emptyIfNegative(final int value) {
-        return value < 0 ? OptionalInt.empty() : OptionalInt.of(value);
-    }
+    /**
+     * Method for validating the settings in the node model.
+     * @param config TODO
+     * @param settings {@link NodeSettingsRO} to validate
+     *
+     * @throws InvalidSettingsException if the config contained in <b>settings</b> is invalid
+     */
+    void validateInModel(C config, final NodeSettingsRO settings) throws InvalidSettingsException;
 
-    static NodeSettingsRO getOrEmpty(final NodeSettingsRO settings, final String key) {
-        try {
-            return settings.getNodeSettings(key);
-        } catch (InvalidSettingsException ex) {
-            return new NodeSettings(key);
-        }
-    }
+    /**
+     * Method for loading the config in the node model.
+     *
+     * @param config to load
+     * @param settings the {@link NodeSettingsRO} to load from
+     * @throws InvalidSettingsException should not be thrown because <b>settings</b> should already be validated by
+     *             {@link #validateInModel(Object, NodeSettingsRO)}
+     */
+    void loadInModel(final C config, final NodeSettingsRO settings) throws InvalidSettingsException;
+
+    /**
+     * Method for saving the config in the node model.
+     *
+     * @param config to save
+     * @param settings the {@link NodeSettingsWO} to save to
+     */
+    void saveInModel(final C config, final NodeSettingsWO settings);
 
 }
