@@ -115,12 +115,6 @@ public class DefaultMultiTableReadConfig<C extends ReaderSpecificConfig<C>> impl
         }
     }
 
-    /**
-     * Loads the config in the node dialog
-     *
-     * @param settings {@link NodeSettingsRO} to load from
-     * @param registry {@link ProducerRegistry} needed to reconstruct the type mapping
-     */
     @Override
     public void loadInDialog(final NodeSettingsRO settings) {
         m_tableReadConfig.loadInDialog(getOrEmpty(settings, CFG_TABLE_READ_CONFIG));
