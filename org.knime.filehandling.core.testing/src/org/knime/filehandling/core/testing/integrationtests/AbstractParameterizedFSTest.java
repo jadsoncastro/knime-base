@@ -72,8 +72,8 @@ import org.knime.filehandling.core.util.IOESupplier;
 public abstract class AbstractParameterizedFSTest {
 
     protected static final String LOCAL = "local";
-    protected static final String S3 = "s3";
-    protected static final String GS = "gs";
+    protected static final String S3 = "amazon-s3";
+    protected static final String GS = "google-cs";
 
     @Parameters(name = "File System: {0}")
     public static Collection<Object[]> allFileSystemTestInitializerProviders() {

@@ -49,11 +49,11 @@
 package org.knime.filehandling.core.testing.local;
 
 import java.io.IOException;
+import java.nio.file.Files;
 
-import org.knime.filehandling.core.connections.FSConnection;
-import org.knime.filehandling.core.connections.FSPath;
 import org.knime.filehandling.core.connections.local.LocalFSConnection;
 import org.knime.filehandling.core.connections.local.LocalFileSystem;
+import org.knime.filehandling.core.connections.local.LocalPath;
 
 /**
  * Implementation of a local file system test initializer.
@@ -62,41 +62,28 @@ import org.knime.filehandling.core.connections.local.LocalFileSystem;
  */
 public class LocalFSTestInitializer extends BasicLocalTestInitializer<LocalPath, LocalFileSystem> {
 
-    private final FSConnection m_connection;
-
-    private final FSPath m_scratchDir;
-
     /**
      * Creates a new instance with a test root folder in the systems temporary directory.
      *
      * @throws IOException
      */
-    @SuppressWarnings("resource")
-    public LocalFSTestInitializer(final LocalFSConnection fsConnection, final String workingDirPrefix) throws IOException {
-        super();
-        // for LocalFS we are using the "real" scratch dir as the working directory
-        m_connection = new LocalFSConnection(getRealScratchDir().toString());
-
-        m_scratchDir = m_connection.getFileSystem().getPath(getRealScratchDir().toString());
+    public LocalFSTestInitializer(final LocalFSConnection fsConnection) throws IOException {
+        super(fsConnection, ((LocalPath)fsConnection.getFileSystem().getWorkingDirectory()).getWrappedPath());
     }
 
     @Override
-    public FSPath getScratchDir() {
-        return m_scratchDir;
-    }
-
-    @Override
-    public FSConnection getFSConnection() {
-        return m_connection;
-    }
-
-    @Override
-    public FSPath createFile(final String... pathComponents) {
+    public LocalPath createFile(final String... pathComponents) {
         return createFileWithContent("", pathComponents);
     }
 
+    @SuppressWarnings("resource")
     @Override
-    public FSPath createFileWithContent(final String content, final String... pathComponents) {
-        return m_connection.getFileSystem().getPath(createLocalFileWithContent(content, pathComponents).toString());
+    public LocalPath createFileWithContent(final String content, final String... pathComponents) {
+        return getFileSystem().getPath(createLocalFileWithContent(content, pathComponents).toString());
+    }
+
+    @Override
+    protected void beforeTestCaseInternal() throws IOException {
+        Files.createDirectories(getLocalTestCaseScratchDir());
     }
 }

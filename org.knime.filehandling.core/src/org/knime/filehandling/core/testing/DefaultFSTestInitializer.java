@@ -65,7 +65,7 @@ public abstract class DefaultFSTestInitializer<P extends FSPath, F extends FSFil
 
     private final F m_fileSystem;
 
-    private int testCaseCounter = 0;
+    private int m_currTestCaseId = 0;
 
     @SuppressWarnings("unchecked")
     protected DefaultFSTestInitializer(final FSConnection fsConnection) {
@@ -78,9 +78,13 @@ public abstract class DefaultFSTestInitializer<P extends FSPath, F extends FSFil
         return m_fsConnection;
     }
 
+    protected int getTestCaseId() {
+        return m_currTestCaseId;
+    }
+
     @Override
-    public final P getTestCaseScratchDir() {
-        return (P)getFileSystem().getWorkingDirectory().resolve(Integer.toString(testCaseCounter));
+    public P getTestCaseScratchDir() {
+        return (P)getFileSystem().getWorkingDirectory().resolve(Integer.toString(m_currTestCaseId));
     }
 
     @Override
@@ -89,8 +93,8 @@ public abstract class DefaultFSTestInitializer<P extends FSPath, F extends FSFil
     }
 
     @Override
-    public final void beforeTestCase() throws IOException {
-        testCaseCounter++;
+    public void beforeTestCase() throws IOException {
+        m_currTestCaseId++;
         beforeTestCaseInternal();
     }
 
@@ -101,4 +105,9 @@ public abstract class DefaultFSTestInitializer<P extends FSPath, F extends FSFil
      * @throws IOException
      */
     protected abstract void beforeTestCaseInternal() throws IOException;
+
+    @Override
+    public P createFile(final String... pathComponents) throws IOException {
+        return createFileWithContent("", pathComponents);
+    }
 }

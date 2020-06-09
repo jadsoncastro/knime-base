@@ -13,6 +13,8 @@ import org.knime.core.node.util.FileSystemBrowser;
  */
 public interface FSConnection extends AutoCloseable {
 
+
+
     /**
      * Closes the file system in this connection and releases any resources allocated by it using a background thread.
      * Any errors during closing will be logged to the {@link NodeLogger} of the {@link FSConnection} implementation.

@@ -52,6 +52,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
 import org.knime.filehandling.core.connections.FSConnection;
@@ -80,15 +81,23 @@ public abstract class BasicLocalTestInitializer<P extends FSPath, F extends FSFi
 
     @Override
     public void afterTestCase() throws IOException {
-        FSFiles.deleteRecursively(getLocalTestCaseScratchDir());
+        try {
+            FSFiles.deleteRecursively(getLocalTestCaseScratchDir());
+        } catch (NoSuchFileException e) {
+            // ignore
+        }
+    }
+
+    @Override
+    public P getTestCaseScratchDir() {
+        return (P)getFileSystem().getWorkingDirectory().resolve(Integer.toString(getTestCaseId()));
     }
 
     /**
      * @return the testcase scratch dir as a path from the platform default provider.
      */
     protected Path getLocalTestCaseScratchDir() {
-        final String testCaseSuffix = getTestCaseScratchDir().getFileName().toString();
-        return m_localWorkingDir.resolve(testCaseSuffix);
+        return m_localWorkingDir.resolve(Integer.toString(getTestCaseId()));
     }
 
     protected Path createLocalFileWithContent(final String content, final String... pathComponents) {

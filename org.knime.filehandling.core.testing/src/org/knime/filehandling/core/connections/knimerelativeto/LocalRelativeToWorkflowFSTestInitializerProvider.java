@@ -46,11 +46,15 @@
 package org.knime.filehandling.core.connections.knimerelativeto;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
+import org.knime.core.node.workflow.WorkflowManager;
 import org.knime.filehandling.core.connections.DefaultFSLocationSpec;
 import org.knime.filehandling.core.connections.FSLocationSpec;
 import org.knime.filehandling.core.defaultnodesettings.FileSystemChoice.Choice;
+import org.knime.filehandling.core.defaultnodesettings.KNIMEConnection.Type;
 import org.knime.filehandling.core.testing.FSTestInitializer;
 import org.knime.filehandling.core.testing.FSTestInitializerProvider;
 
@@ -69,7 +73,13 @@ public class LocalRelativeToWorkflowFSTestInitializerProvider implements FSTestI
 
     @Override
     public FSTestInitializer setup(final Map<String, String> configuration) throws IOException {
-        return new LocalRelativeToFSTestInitializer(KNIME_FS_HOST);
+        final Path localMountPointRoot = Files.createTempDirectory("knime-relative-workflow-test");
+
+        final WorkflowManager workflowManager = LocalRelativeToTestUtil.createAndLoadDummyWorkflow(localMountPointRoot);
+        final LocalRelativeToFSConnection fsConnection = new LocalRelativeToFSConnection(Type.WORKFLOW_RELATIVE);
+        LocalRelativeToTestUtil.shutdownWorkflowManager(workflowManager);
+
+        return new LocalRelativeToFSTestInitializer(fsConnection, localMountPointRoot);
     }
 
     @Override

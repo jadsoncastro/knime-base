@@ -56,7 +56,6 @@ import java.util.Map;
 import org.knime.filehandling.core.connections.FSLocationSpec;
 import org.knime.filehandling.core.connections.local.LocalFSConnection;
 import org.knime.filehandling.core.connections.local.LocalFileSystem;
-import org.knime.filehandling.core.testing.FSTestInitializer;
 import org.knime.filehandling.core.testing.FSTestInitializerProvider;
 
 /**
@@ -68,13 +67,12 @@ public class LocalFSTestInitializerProvider implements FSTestInitializerProvider
 
     private final static String FS_NAME = "local";
 
+    @SuppressWarnings("resource")
     @Override
-    public FSTestInitializer setup(final Map<String, String> configuration) throws IOException {
-
-        final Path p = Files.createTempDirectory("knime-localfs-test");
-        final LocalFSConnection fsConn = new LocalFS
-
-        return new LocalFSTestInitializer();
+    public LocalFSTestInitializer setup(final Map<String, String> configuration) throws IOException {
+        final Path workingDir = Files.createTempDirectory("knime-localfs-test");
+        final LocalFSConnection fsConn = new LocalFSConnection(workingDir.toString());
+        return new LocalFSTestInitializer(fsConn);
     }
 
     @Override
