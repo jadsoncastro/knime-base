@@ -1640,6 +1640,11 @@
       <node
             after="org.knime.base.node.util.createtempdir.CreateTempDirectoryNodeFactory"
             category-path="/io/io-other"
+            factory-class="org.knime.base.node.io.filehandling.util.createtempdir2.CreateTempDir2NodeFactory"
+            />
+      <node
+            after="org.knime.base.node.util.createtempdir.CreateTempDirectoryNodeFactory"
+            category-path="/io/io-other"
             factory-class="org.knime.base.node.util.sendmail.SendMailNodeFactory"
             >
       </node>
