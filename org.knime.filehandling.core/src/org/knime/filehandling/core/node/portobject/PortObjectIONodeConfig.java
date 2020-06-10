@@ -53,17 +53,18 @@ import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.context.NodeCreationConfiguration;
 import org.knime.core.node.port.PortObject;
 import org.knime.core.node.port.PortObjectSpec;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.SettingsModelFileChooser3;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.AbstractSettingsModelFileChooser;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.reader.SettingsModelReaderFileChooser;
 import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeConfig;
 
 /**
  * Configuration class for port object reader and writer nodes that can be extended with additional configurations.
  *
  * @author Simon Schmid, KNIME GmbH, Konstanz, Germany
- * @param <S> any class inheriting from {@link SettingsModelFileChooser3}
+ * @param <S> any class inheriting from {@link SettingsModelReaderFileChooser}
  * @noextend extend either {@link PortObject} or {@link PortObjectWriterNodeConfig}
  */
-public abstract class PortObjectIONodeConfig<S extends SettingsModelFileChooser3> {
+public abstract class PortObjectIONodeConfig<S extends AbstractSettingsModelFileChooser> {
 
     /** The name of the optional connection input port group. */
     protected static final String CONNECTION_INPUT_PORT_GRP_NAME = "File System Connection";

@@ -44,7 +44,7 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   May 22, 2020 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
+ *   Jun 10, 2020 (Mark Ortmann, KNIME GmbH, Berlin, Germany): created
  */
 package org.knime.filehandling.core.defaultnodesettings.filechooser;
 
@@ -64,7 +64,6 @@ import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.util.CheckUtils;
 import org.knime.filehandling.core.connections.FSConnection;
 import org.knime.filehandling.core.connections.FSLocation;
-import org.knime.filehandling.core.connections.FSPath;
 import org.knime.filehandling.core.defaultnodesettings.FileSystemHelper;
 import org.knime.filehandling.core.defaultnodesettings.filesystemchooser.FileSystemChooserUtils;
 import org.knime.filehandling.core.defaultnodesettings.filesystemchooser.config.FileSystemConfiguration;
@@ -77,16 +76,10 @@ import org.knime.filehandling.core.defaultnodesettings.status.StatusMessage.Mess
 import org.knime.filehandling.core.defaultnodesettings.status.StatusReporter;
 
 /**
- * SettingsModel for the {@link DialogComponentFileChooser3}.</br>
- * It allows to create {@link ReadPathAccessor} and {@link WritePathAccessor} objects for accessing the {@link FSPath
- * paths} specified in the dialog.</br>
- * <b>IMPORTANT NOTE:</b> Nodes that use this settings model must call the
- * {@link #configureInModel(PortObjectSpec[], Consumer)} method in the respective {@code configure} method of the node
- * model before retrieving e.g. the {@link FSLocation} via {@link #getLocation()}.
  *
- * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+ * @author Mark Ortmann, KNIME GmbH, Berlin, Germany
  */
-public class SettingsModelFileChooser3 extends SettingsModel implements StatusReporter {
+public abstract class AbstractSettingsModelFileChooser extends SettingsModel implements StatusReporter {
 
     private static final DefaultStatusMessage NO_LOCATION_ERROR =
         new DefaultStatusMessage(MessageType.ERROR, "Please specify a location");
@@ -108,7 +101,7 @@ public class SettingsModelFileChooser3 extends SettingsModel implements StatusRe
      * @param defaultFilterMode the default {@link FilterMode}
      * @param fileExtensions the supported file extensions
      */
-    public SettingsModelFileChooser3(final String configName, final PortsConfiguration portsConfig,
+    protected AbstractSettingsModelFileChooser(final String configName, final PortsConfiguration portsConfig,
         final String fileSystemPortIdentifier, final FilterMode defaultFilterMode, final String... fileExtensions) {
         m_fsConfig = FileSystemChooserUtils.createConfig(portsConfig, fileSystemPortIdentifier, new FSLocationConfig());
         m_fsConfig.addChangeListener(e -> notifyChangeListeners());
@@ -124,7 +117,7 @@ public class SettingsModelFileChooser3 extends SettingsModel implements StatusRe
      *
      * @param toCopy instance to copy
      */
-    protected SettingsModelFileChooser3(final SettingsModelFileChooser3 toCopy) {
+    protected AbstractSettingsModelFileChooser(final AbstractSettingsModelFileChooser toCopy) {
         m_configName = toCopy.m_configName;
         m_fsConfig = toCopy.m_fsConfig.copy();
         m_fileExtensions = toCopy.m_fileExtensions.clone();
@@ -243,9 +236,7 @@ public class SettingsModelFileChooser3 extends SettingsModel implements StatusRe
 
     @SuppressWarnings("unchecked") // necessary due to bad use of generics in the super class
     @Override
-    protected SettingsModelFileChooser3 createClone() {
-        return new SettingsModelFileChooser3(this);
-    }
+    protected abstract AbstractSettingsModelFileChooser createClone();
 
     @Override
     protected String getModelTypeID() {
@@ -376,5 +367,4 @@ public class SettingsModelFileChooser3 extends SettingsModel implements StatusRe
             messageConsumer.accept(NO_LOCATION_ERROR);
         }
     }
-
 }

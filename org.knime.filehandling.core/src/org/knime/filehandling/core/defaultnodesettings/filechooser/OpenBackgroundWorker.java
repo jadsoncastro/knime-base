@@ -64,9 +64,9 @@ import org.knime.filehandling.core.defaultnodesettings.status.StatusMessage.Mess
  */
 final class OpenBackgroundWorker implements Callable<StatusMessage> {
 
-    private final SettingsModelFileChooser3 m_settings;
+    private final AbstractSettingsModelFileChooser m_settings;
 
-    OpenBackgroundWorker(final SettingsModelFileChooser3 settings) {
+    OpenBackgroundWorker(final AbstractSettingsModelFileChooser settings) {
         m_settings = settings;
     }
 

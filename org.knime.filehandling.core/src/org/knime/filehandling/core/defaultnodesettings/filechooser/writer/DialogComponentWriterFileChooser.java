@@ -63,22 +63,22 @@ import javax.swing.JRadioButton;
 import org.knime.core.node.FlowVariableModel;
 import org.knime.core.node.util.FileSystemBrowser.DialogType;
 import org.knime.filehandling.core.defaultnodesettings.FileSystemChoice.Choice;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentFileChooser3;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.SettingsModelFileChooser3;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentReaderFileChooser;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.reader.SettingsModelReaderFileChooser;
 import org.knime.filehandling.core.defaultnodesettings.fileselection.FileSelectionDialog;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.util.GBCBuilder;
 
 /**
  * File chooser dialog component for writer nodes.</br>
- * In addition to the components offered by {@link DialogComponentFileChooser3}, this dialog component adds a check box
+ * In addition to the components offered by {@link DialogComponentReaderFileChooser}, this dialog component adds a check box
  * for specifying whether parent directories should be created, as well as radio buttons to select the desired policy
  * for existing files.
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  * @since 4.2
  */
-public final class DialogComponentWriterFileChooser extends DialogComponentFileChooser3 {
+public final class DialogComponentWriterFileChooser extends DialogComponentReaderFileChooser {
 
     private JCheckBox m_createParentDirectories;
 
@@ -89,7 +89,7 @@ public final class DialogComponentWriterFileChooser extends DialogComponentFileC
     /**
      * Constructor.
      *
-     * @param model the {@link SettingsModelFileChooser3} the dialog component interacts with
+     * @param model the {@link SettingsModelReaderFileChooser} the dialog component interacts with
      * @param historyID id used to store file history used by {@link FileSelectionDialog}
      * @param locationFvm the {@link FlowVariableModel} for the location
      * @param filterModes the available {@link FilterMode FilterModes} (if a none are provided, the default filter mode

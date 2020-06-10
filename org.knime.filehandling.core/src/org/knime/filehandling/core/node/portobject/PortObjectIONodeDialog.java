@@ -64,7 +64,7 @@ import org.knime.core.node.NotConfigurableException;
 import org.knime.core.node.port.PortObjectSpec;
 import org.knime.core.node.util.FileSystemBrowser;
 import org.knime.filehandling.core.data.location.variable.FSLocationVariableType;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentFileChooser3;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentReaderFileChooser;
 import org.knime.filehandling.core.node.portobject.reader.PortObjectReaderNodeDialog;
 import org.knime.filehandling.core.node.portobject.writer.PortObjectWriterNodeDialog;
 
@@ -82,16 +82,16 @@ public abstract class PortObjectIONodeDialog<C extends PortObjectIONodeConfig<?>
 
     private final List<JPanel> m_additionalPanels = new ArrayList<>();
 
-    private DialogComponentFileChooser3 m_filePanel;
+    private DialogComponentReaderFileChooser m_filePanel;
 
     /**
      * Constructor.
      *
      * @param config the config
-     * @param createPanel {@link Function} to create an instance of {@link DialogComponentFileChooser3}
+     * @param createPanel {@link Function} to create an instance of {@link DialogComponentReaderFileChooser}
      */
     protected PortObjectIONodeDialog(final C config,
-        final Function<FlowVariableModel, ? extends DialogComponentFileChooser3> createPanel) {
+        final Function<FlowVariableModel, ? extends DialogComponentReaderFileChooser> createPanel) {
         m_config = config;
         m_filePanel = createPanel.apply(createFlowVariableModel(config.getFileChooserModel().getKeysForFSLocation(),
             FSLocationVariableType.INSTANCE));

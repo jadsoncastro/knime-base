@@ -72,9 +72,9 @@ final class SaveBackgroundWorker implements Callable<StatusMessage> {
 
     private static final NodeLogger LOGGER = NodeLogger.getLogger(SaveBackgroundWorker.class);
 
-    private final SettingsModelFileChooser3 m_settings;
+    private final AbstractSettingsModelFileChooser m_settings;
 
-    SaveBackgroundWorker(final SettingsModelFileChooser3 settings) {
+    SaveBackgroundWorker(final AbstractSettingsModelFileChooser settings) {
         m_settings = settings;
     }
 

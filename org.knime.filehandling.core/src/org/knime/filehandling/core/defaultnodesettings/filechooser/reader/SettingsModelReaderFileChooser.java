@@ -44,53 +44,55 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   Jun 3, 2020 (Mark Ortmann, KNIME GmbH, Berlin, Germany): created
+ *   May 22, 2020 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
-package org.knime.filehandling.core.node.portobject;
+package org.knime.filehandling.core.defaultnodesettings.filechooser.reader;
 
+import java.util.function.Consumer;
+
+import org.knime.core.node.context.ports.PortsConfiguration;
+import org.knime.core.node.port.PortObjectSpec;
+import org.knime.filehandling.core.connections.FSLocation;
+import org.knime.filehandling.core.connections.FSPath;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.AbstractSettingsModelFileChooser;
 import org.knime.filehandling.core.defaultnodesettings.filechooser.DialogComponentReaderFileChooser;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.ReadPathAccessor;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.WritePathAccessor;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 
 /**
- * The allowed selection for the {@link DialogComponentReaderFileChooser} in the context of PortObject reader and writers.
+ * SettingsModel for the {@link DialogComponentReaderFileChooser}.</br>
+ * It allows to create {@link ReadPathAccessor} and {@link WritePathAccessor} objects for accessing the {@link FSPath
+ * paths} specified in the dialog.</br>
+ * <b>IMPORTANT NOTE:</b> Nodes that use this settings model must call the
+ * {@link #configureInModel(PortObjectSpec[], Consumer)} method in the respective {@code configure} method of the node
+ * model before retrieving e.g. the {@link FSLocation} via {@link #getLocation()}.
  *
- * @author Mark Ortmann, KNIME GmbH, Berlin, Germany
+ * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-public enum SelectionMode {
-
-        /** Corresponds to {@link FilterMode#FILE}. */
-        FILE(FilterMode.FILE),
-
-        /** Corresponds to {@link FilterMode#FOLDER}. */
-        FOLDER(FilterMode.FOLDER),
-
-        /** Corresponds to {@link FilterMode#FILE} and {@link FilterMode#FOLDER}. */
-        FILE_AND_FOLDER(FilterMode.FILE, FilterMode.FOLDER);
-
-    private final FilterMode[] m_filters;
-
-    private final FilterMode m_defaultFilter;
-
-    private SelectionMode(final FilterMode... filters) {
-        m_filters = filters;
-        m_defaultFilter = filters[0];
-    }
+public class SettingsModelReaderFileChooser extends AbstractSettingsModelFileChooser {
 
     /**
-     * Returns the associated {@link FilterMode}s.
+     * Constructor.
      *
-     * @return the associated {@link FilterMode}s
+     * @param configName under which to store the settings
+     * @param portsConfig {@link PortsConfiguration} of the corresponding KNIME node
+     * @param fileSystemPortIdentifier identifier of the file system port group in <b>portsConfig</b>
+     * @param defaultFilterMode the default {@link FilterMode}
+     * @param fileExtensions the supported file extensions
      */
-    public FilterMode[] getFilters() {
-        return m_filters;
+    public SettingsModelReaderFileChooser(final String configName, final PortsConfiguration portsConfig,
+        final String fileSystemPortIdentifier, final FilterMode defaultFilterMode, final String[] fileExtensions) {
+        super(configName, portsConfig, fileSystemPortIdentifier, defaultFilterMode, fileExtensions);
     }
 
-    /**
-     * Returns the associated default {@link FilterMode}.
-     *
-     * @return the associated default {@link FilterMode}
-     */
-    public FilterMode getDefaultFilter() {
-        return m_defaultFilter;
+    private SettingsModelReaderFileChooser(final AbstractSettingsModelFileChooser toCopy) {
+        super(toCopy);
     }
+
+    @Override
+    protected SettingsModelReaderFileChooser createClone() {
+        return new SettingsModelReaderFileChooser(this);
+    }
+
 }

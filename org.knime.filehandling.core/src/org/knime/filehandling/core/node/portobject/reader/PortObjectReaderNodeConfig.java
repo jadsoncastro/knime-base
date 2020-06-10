@@ -47,7 +47,7 @@
 package org.knime.filehandling.core.node.portobject.reader;
 
 import org.knime.core.node.context.NodeCreationConfiguration;
-import org.knime.filehandling.core.defaultnodesettings.filechooser.SettingsModelFileChooser3;
+import org.knime.filehandling.core.defaultnodesettings.filechooser.reader.SettingsModelReaderFileChooser;
 import org.knime.filehandling.core.defaultnodesettings.filtermode.SettingsModelFilterMode.FilterMode;
 import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
 
@@ -56,7 +56,7 @@ import org.knime.filehandling.core.node.portobject.PortObjectIONodeConfig;
  *
  * @author Simon Schmid, KNIME GmbH, Konstanz, Germany
  */
-public class PortObjectReaderNodeConfig extends PortObjectIONodeConfig<SettingsModelFileChooser3> {
+public class PortObjectReaderNodeConfig extends PortObjectIONodeConfig<SettingsModelReaderFileChooser> {
 
     /**
      * Constructor for configs in which the file chooser doesn't filter on file suffixes.
@@ -75,7 +75,7 @@ public class PortObjectReaderNodeConfig extends PortObjectIONodeConfig<SettingsM
      */
     public PortObjectReaderNodeConfig(final NodeCreationConfiguration creationConfig, final String[] fileSuffixes) {
         super(creationConfig,
-            new SettingsModelFileChooser3(CFG_FILE_CHOOSER,
+            new SettingsModelReaderFileChooser(CFG_FILE_CHOOSER,
                 creationConfig.getPortConfig().orElseThrow(IllegalStateException::new), CONNECTION_INPUT_PORT_GRP_NAME,
                 FilterMode.FILE, fileSuffixes));
     }

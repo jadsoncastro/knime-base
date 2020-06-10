@@ -75,8 +75,9 @@ import org.knime.filehandling.core.defaultnodesettings.status.StatusMessage;
 import org.knime.filehandling.core.defaultnodesettings.status.StatusMessage.MessageType;
 
 /**
- * Allows access to the {@link FSPath FSPaths} referred to by the {@link SettingsModelFileChooser3} provided in the
- * constructor. The paths are also validated and respective exceptions are thrown if the settings yield invalid paths.
+ * Allows access to the {@link FSPath FSPaths} referred to by the {@link AbstractSettingsModelFileChooser} provided in
+ * the constructor. The paths are also validated and respective exceptions are thrown if the settings yield invalid
+ * paths.
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
@@ -89,7 +90,7 @@ public final class FileChooserPathAccessor implements ReadPathAccessor, WritePat
 
     private final Optional<FSConnection> m_portObjectConnection;
 
-    private final SettingsModelFileChooser3 m_settings;
+    private final AbstractSettingsModelFileChooser m_settings;
 
     private final FilterMode m_filterMode;
 
@@ -104,15 +105,15 @@ public final class FileChooserPathAccessor implements ReadPathAccessor, WritePat
     private FSFileSystem<?> m_fileSystem;
 
     /**
-     * Creates a new FileChooserAccessor for the provided {@link SettingsModelFileChooser3} and {@link FSConnection
-     * connection} (if provided).</br>
+     * Creates a new FileChooserAccessor for the provided {@link AbstractSettingsModelFileChooser} and
+     * {@link FSConnection connection} (if provided).</br>
      * The settings are not validated in this constructor but instead if {@link #getOutputPath(Consumer)} or
      * {@link #getPaths(Consumer)} are called.
      *
-     * @param settings {@link SettingsModelFileChooser3} provided by the user
+     * @param settings {@link AbstractSettingsModelFileChooser} provided by the user
      * @param portObjectConnection connection retrieved from the file system port object (if the node has one)
      */
-    public FileChooserPathAccessor(final SettingsModelFileChooser3 settings,
+    public FileChooserPathAccessor(final AbstractSettingsModelFileChooser settings,
         final Optional<FSConnection> portObjectConnection) {
         m_rootLocation = settings.getLocation();
         m_portObjectConnection = portObjectConnection;
