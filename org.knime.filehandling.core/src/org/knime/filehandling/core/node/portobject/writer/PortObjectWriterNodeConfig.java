@@ -62,8 +62,11 @@ import org.knime.filehandling.core.node.portobject.SelectionMode;
  */
 public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsModelWriterFileChooser> {
 
+    private static final String[] EMPTY_SUFFIX = new String[0];
+
     /**
-     * Constructor for configs in which the file chooser doesn't filter on file suffixes.
+     * Constructor for configurations for which the default filter mode is set to the default associated with the given
+     * {@link SelectionMode} and no valid suffixes are available.
      *
      * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      * @param defaultSelectionMode the default {@link SelectionMode}
@@ -74,7 +77,18 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsM
     }
 
     /**
-     * Constructor for configs in which the file chooser filters on a set of file suffixes.
+     * Constructor for configurations for which the file filter mode is {@link SelectionMode#FILE} and no file suffixes
+     * are available.
+     *
+     * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
+     */
+    public PortObjectWriterNodeConfig(final NodeCreationConfiguration creationConfig) {
+        this(creationConfig, EMPTY_SUFFIX);
+    }
+
+    /**
+     * Constructor for configurations for which the default filter mode is {@link SelectionMode#FILE} and a set of valid
+     * suffixes is available.
      *
      * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      * @param fileSuffixes the suffixes to filter on
@@ -84,7 +98,8 @@ public class PortObjectWriterNodeConfig extends PortObjectIONodeConfig<SettingsM
     }
 
     /**
-     * Constructor for configs in which the file chooser filters on a set of file suffixes.
+     * Constructor for configurations for which the default filter mode is set according the provided {@link FilterMode}
+     * and a set of valid suffixes is available.
      *
      * @param creationConfig {@link NodeCreationConfiguration} of the corresponding KNIME node
      * @param fileSuffixes the suffixes to filter on

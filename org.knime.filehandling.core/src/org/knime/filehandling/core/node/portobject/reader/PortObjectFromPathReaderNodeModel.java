@@ -94,7 +94,7 @@ public abstract class PortObjectFromPathReaderNodeModel<C extends PortObjectRead
     protected final PortObject[] execute(final PortObject[] data, final ExecutionContext exec) throws Exception {
         try (final ReadPathAccessor accessor = getConfig().getFileChooserModel().createReadPathAccessor()) {
             final PriorityStatusConsumer statusConsumer = new PriorityStatusConsumer();
-            final List<FSPath> paths = accessor.getPaths(statusConsumer);
+            final List<FSPath> paths = accessor.getFSPaths(statusConsumer);
             assert paths.size() == 1;
             final Optional<StatusMessage> statusMessage = statusConsumer.get();
             if (statusMessage.isPresent()) {
